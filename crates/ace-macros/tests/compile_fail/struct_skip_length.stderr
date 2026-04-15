@@ -1,0 +1,7 @@
+error: field `data`: `skip` cannot be combined with `read_all` or `length`
+ --> tests/compile_fail/struct_skip_length.rs:3:10
+  |
+3 | #[derive(FrameRead)]
+  |          ^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `FrameRead` (in Nightly builds, run with -Z macro-backtrace for more info)

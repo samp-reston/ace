@@ -1,0 +1,13 @@
+[package]
+name = "ace-proto"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+alloc = ["ace-core/alloc"]
+std = ["alloc", "heapless/defmt", "ace-core/std"]
+
+[dependencies]
+ace-core = { path = "../ace-core", default-features = false }
+heapless = { workspace = true }

@@ -1,0 +1,13 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.dependencies]
+heapless = { version = "0.9.2", default-features = false }
+bytes = { version = "1.11.1", default-features = false }
+darling = { version = "0.23.0" }
+proc-macro2 = { version = "1.0.106" }
+quote = { version = "1.0.45" }
+syn = { version = "2.0.117" }
+trybuild = { version = "1.0.116" }
+proptest = { version = "1.10.0" }

@@ -1,0 +1,19 @@
+[package]
+name = "ace-server"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+alloc = ["ace-core/alloc", "ace-uds/alloc"]
+std = ["alloc", "ace-core/std", "ace-uds/std", "ace-sim/std"]
+
+[dependencies]
+ace-core = { path = "../ace-core", default-features = false }
+ace-uds = { path = "../ace-uds", default-features = false }
+ace-sim = { path = "../ace-sim", default-features = false }
+ace-proto = { path = "../ace-proto", default-features = false }
+heapless = { workspace = true }
+
+[dev-dependencies]
+ace-sim = { path = "../ace-sim", features = ["std"] }

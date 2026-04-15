@@ -1,0 +1,17 @@
+[package]
+name = "ace-can"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+alloc = ["ace-core/alloc", "ace-proto/alloc"]
+std = ["alloc", "ace-core/std", "ace-proto/std"]
+
+[dependencies]
+ace-core = { path = "../ace-core", default-features = false }
+ace-proto = { path = "../ace-proto", default-features = false }
+heapless = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

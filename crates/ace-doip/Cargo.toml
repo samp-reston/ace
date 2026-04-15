@@ -1,0 +1,23 @@
+[package]
+name = "ace-doip"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+alloc = ["ace-core/alloc", "ace-proto/alloc"]
+std = ["alloc", "ace-core/std", "ace-proto/std"]
+
+[dependencies]
+ace-macros = { path = "../ace-macros", default-features = false }
+ace-core = { path = "../ace-core", default-features = false }
+ace-proto = { path = "../ace-proto", default-features = false }
+ace-uds = { path = "../ace-uds", default-features = false }
+ace-sim = { path = "../ace-sim", default-features = false }
+bytes = { workspace = true }
+heapless = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+ace-core = { path = "../ace-core", features = ["alloc"] }
+bytes = { workspace = true }

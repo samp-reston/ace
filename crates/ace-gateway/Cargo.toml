@@ -1,0 +1,14 @@
+[package]
+name = "ace-gateway"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ace-sim = { path = "../ace-sim", default-features = false }
+ace-doip = { path = "../ace-doip", default-features = false }
+ace-can = { path = "../ace-can", default-features = false }
+ace-proto = { path = "../ace-proto", default-features = false }
+ace-core = { path = "../ace-core", default-features = false }
+ace-macros = { path = "../ace-macros", default-features = false }
+ace-client = { path = "../ace-client", default-features = false }
+heapless = { workspace = true }

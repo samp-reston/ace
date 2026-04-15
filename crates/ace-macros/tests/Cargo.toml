@@ -1,0 +1,14 @@
+[package]
+name = "ace-macros-tests"
+version = "0.0.0"
+edition = "2024"
+
+[features]
+default = ["alloc"]
+alloc = []
+
+[dependencies]
+ace-macros = { path = ".." }
+ace-core = { path = "../../ace-core", features = ["alloc"] }
+heapless = { workspace = true }
+bytes = { workspace = true }

@@ -1,0 +1,12 @@
+[package]
+name = "ace-sim"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+std = ["ace-core/std"]
+
+[dependencies]
+ace-core = { path = "../ace-core", default-features = false }
+heapless = { workspace = true }

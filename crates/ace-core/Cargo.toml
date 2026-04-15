@@ -1,0 +1,13 @@
+[package]
+name = "ace-core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+alloc = ["bytes"]
+std = ["alloc", "heapless/defmt"]
+
+[dependencies]
+heapless = { workspace = true }
+bytes = { workspace = true, optional = true }

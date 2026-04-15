@@ -1,0 +1,7 @@
+error: Missing field `error`
+ --> tests/compile_fail/struct_missing.rs:3:10
+  |
+3 | #[derive(FrameRead)]
+  |          ^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `FrameRead` (in Nightly builds, run with -Z macro-backtrace for more info)
