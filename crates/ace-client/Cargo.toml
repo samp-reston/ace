@@ -2,6 +2,13 @@
 name = "ace-client"
 version = "0.1.0"
 edition = "2024"
+authors = ["Samuel Preston <samp.reston@outlook.com>"]
+description = "UDS tester client state machine."
+readme = "README.md"
+repository = "https://github.com/samp-reston/ace"
+license = "MIT or Apache-2.0"
+keywords = ["diagnostics", "vehicle", "standards"]
+categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
@@ -9,8 +16,8 @@ alloc = ["ace-core/alloc", "ace-uds/alloc"]
 std = ["alloc", "ace-core/std", "ace-uds/std", "ace-sim/std"]
 
 [dependencies]
-ace-core = { path = "../ace-core", default-features = false }
-ace-proto = { path = "../ace-proto", default-features = false }
+ace-core = { version = "0.1.0", default-features = false }
+ace-proto = { version = "0.1.0", default-features = false }
 ace-uds = { path = "../ace-uds", default-features = false }
 ace-sim = { path = "../ace-sim", default-features = false }
 heapless = { workspace = true }
