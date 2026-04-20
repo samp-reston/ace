@@ -1,4 +1,4 @@
-# ace — Automotive Communication Engine
+# ace - Automotive Communication Engine
 
 A `no_std`-first Rust workspace for automotive diagnostic communication. Implements ISO 14229-1 (UDS), ISO 13400-2 (DoIP), and ISO 15765-2 (ISO-TP) with a deterministic simulation layer for property-based testing.
 
@@ -12,7 +12,7 @@ A `no_std`-first Rust workspace for automotive diagnostic communication. Impleme
 
 **Deterministic simulation first.** Protocol state machines are designed from the ground up to be driven by injected time and injected randomness. The same seed always reproduces the same execution. Bugs found in simulation are real bugs that will occur in production.
 
-**Transport agnostic.** `UdsServer` and `UdsClient` know nothing about CAN or Ethernet. The transport layer — ISO-TP over CAN, DoIP over TCP — is wired externally. This makes both layers independently testable and independently replaceable.
+**Transport agnostic.** `UdsServer` and `UdsClient` know nothing about CAN or Ethernet. The transport layer - ISO-TP over CAN, DoIP over TCP — is wired externally. This makes both layers independently testable and independently replaceable.
 
 ---
 
@@ -20,18 +20,18 @@ A `no_std`-first Rust workspace for automotive diagnostic communication. Impleme
 
 ```
 ace/
-├── ace-can         — ISO-TP reassembler and segmenter (ISO 15765-2)
-├── ace-client      — UDS tester client state machine
-├── ace-core        — Codec traits, error types, primitive impls
-├── ace-doip        — DoIP typed message and session layer (ISO 13400-2)
-├── ace-gateway     — DoIP gateway, ISO-TP bridge, DoIP tester
-├── ace-macros      — Proc-macro derives: FrameRead, FrameWrite, FrameCodec
-├── ace-proto       — Raw frame types: UdsFrame, DoipFrame, CAN frames
-├── ace-server      — UDS ECU server state machine
-├── ace-sim         — Deterministic simulation infrastructure
-└── ace-tests       — DST property tests for the full stack
-├── ace-transport   — Production OS transport (std, TCP/UDP)
-├── ace-uds         — UDS typed message layer (ISO 14229-1)
+├── ace-can         - ISO-TP reassembler and segmenter (ISO 15765-2)
+├── ace-client      - UDS tester client state machine
+├── ace-core        - Codec traits, error types, primitive impls
+├── ace-doip        - DoIP typed message and session layer (ISO 13400-2)
+├── ace-gateway     - DoIP gateway, ISO-TP bridge, DoIP tester
+├── ace-macros      - Proc-macro derives: FrameRead, FrameWrite, FrameCodec
+├── ace-proto       - Raw frame types: UdsFrame, DoipFrame, CAN frames
+├── ace-server      - UDS ECU server state machine
+├── ace-sim         - Deterministic simulation infrastructure
+└── ace-tests       - DST property tests for the full stack
+├── ace-transport   - Production OS transport (std, TCP/UDP)
+├── ace-uds         - UDS typed message layer (ISO 14229-1)
 ```
 
 ---
@@ -42,9 +42,9 @@ ace/
 
 Foundation layer. Defines the three codec traits that everything else builds on:
 
-- `FrameRead<'a>` — zero-copy decode from a `&mut &'a [u8]` cursor
-- `FrameWrite` — encode into a `Writer` (either `&mut [u8]` or `BytesMut`)
-- `Writer` — sealed trait abstracting alloc and no-alloc write targets
+- `FrameRead<'a>` - zero-copy decode from a `&mut &'a [u8]` cursor
+- `FrameWrite` - encode into a `Writer` (either `&mut [u8]` or `BytesMut`)
+- `Writer` - sealed trait abstracting alloc and no-alloc write targets
 
 Also provides `DiagError`, `AddressMode`, `DiagnosticAddress`, and the `FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
 
@@ -80,11 +80,11 @@ pub enum DiagnosticSessionType {
 ```
 
 Field attributes:
-- `#[frame(id = 0xNN)]` — discriminant for unit and newtype enum variants
-- `#[frame(id_pat = "...")]` — pattern for catchall variants carrying a raw `u8`
-- `#[frame(length = expr)]` — fixed byte count for slice fields
-- `#[frame(read_all)]` — consume all remaining bytes (trailing `&[u8]` fields)
-- `#[frame(skip)]` — exclude from encode/decode, initialise with `Default`
+- `#[frame(id = 0xNN)]` - discriminant for unit and newtype enum variants
+- `#[frame(id_pat = "...")]` - pattern for catchall variants carrying a raw `u8`
+- `#[frame(length = expr)]` - fixed byte count for slice fields
+- `#[frame(read_all)]` - consume all remaining bytes (trailing `&[u8]` fields)
+- `#[frame(skip)]` - exclude from encode/decode, initialise with `Default`
 
 ---
 
@@ -92,7 +92,7 @@ Field attributes:
 
 Raw frame wrappers with no protocol knowledge. Provides `UdsFrame<'a>`, `UdsFrameMut<'a>`, `DoipFrame<'a>`, `DoipFrameMut<'a>`, and CAN frame types (`CanFrame`, `CanFrameMut`, `CanFdFrame`, `CanFdFrameMut`).
 
-These types wrap byte slices and provide structural access — length, index, iteration. Protocol semantics are added by extension traits in `ace-uds` and `ace-doip`.
+These types wrap byte slices and provide structural access - length, index, iteration. Protocol semantics are added by extension traits in `ace-uds` and `ace-doip`.
 
 ---
 
@@ -102,8 +102,8 @@ UDS typed message layer implementing ISO 14229-1.
 
 Provides all service request and response types as structs and enums deriving `FrameCodec`. Also provides:
 
-- `UdsFrameExt` — semantic accessors on `UdsFrame`: `service_identifier()`, `sub_function_value()`, `is_suppressed()`, `payload()`, `is_negative_response()`, `negative_response_code()`
-- `ServiceIdentifier` enum — all ISO 14229-1 SIDs with `has_sub_function()` helper
+- `UdsFrameExt` - semantic accessors on `UdsFrame`: `service_identifier()`, `sub_function_value()`, `is_suppressed()`, `payload()`, `is_negative_response()`, `negative_response_code()`
+- `ServiceIdentifier` enum - all ISO 14229-1 SIDs with `has_sub_function()` helper
 
 ```rust
 use ace_uds::ext::UdsFrameExt;
@@ -121,9 +121,9 @@ let payload = frame.payload();                 // &[u8] after SID byte
 
 DoIP typed message and session layer implementing ISO 13400-2.
 
-**Message layer** — all payload types as structs deriving `FrameCodec`: `RoutingActivationRequest`, `RoutingActivationResponse`, `DiagnosticMessage`, `DiagnosticMessageAck`, `DiagnosticMessageNack`, `VehicleAnnouncementMessage`, `EntityStatusResponse`, `AliveCheckRequest`, `AliveCheckResponse`, and more.
+**Message layer** - all payload types as structs deriving `FrameCodec`: `RoutingActivationRequest`, `RoutingActivationResponse`, `DiagnosticMessage`, `DiagnosticMessageAck`, `DiagnosticMessageNack`, `VehicleAnnouncementMessage`, `EntityStatusResponse`, `AliveCheckRequest`, `AliveCheckResponse`, and more.
 
-**Session layer** — `ActivationStateMachine` and `ConnectionState` model the per-TCP-connection routing activation lifecycle:
+**Session layer** - `ActivationStateMachine` and `ConnectionState` model the per-TCP-connection routing activation lifecycle:
 
 ```
 Idle → ActivationPending → Active → Deactivated
@@ -146,7 +146,7 @@ pub trait ActivationAuthProvider {
 ```rust
 frame.validate_header()?;          // checks version, inverse, type, length
 frame.payload_type();              // Option<Result<PayloadType, _>>
-frame.payload_bytes();             // Option<&[u8]> — bytes after 8-byte header
+frame.payload_bytes();             // Option<&[u8]> - bytes after 8-byte header
 frame.payload_length_declared();   // length from header bytes 4-7
 ```
 
@@ -156,10 +156,10 @@ frame.payload_length_declared();   // length from header bytes 4-7
 
 ISO-TP implementation (ISO 15765-2). Provides the reassembler and segmenter used by `ace-gateway`'s `IsoTpNode` to bridge DoIP UDS payloads to CAN frames.
 
-**Design:** addressing mode (Normal / Extended / Mixed) is a caller concern. The reassembler and segmenter operate on pure PCI bytes — callers strip/prepend the address byte at the transport boundary.
+**Design:** addressing mode (Normal / Extended / Mixed) is a caller concern. The reassembler and segmenter operate on pure PCI bytes - callers strip/prepend the address byte at the transport boundary.
 
 ```rust
-// Segmenter — owns its payload buffer, no lifetime, no unsafe
+// Segmenter - owns its payload buffer, no lifetime, no unsafe
 let mut seg = Segmenter::<4096>::new(SegmenterConfig::classic(Normal));
 seg.start(&uds_payload)?;
 
@@ -194,7 +194,7 @@ UDS ECU server state machine (ISO 14229-1 ECU side).
 
 Handles all session management, security access state, P2/S3 timing, periodic DID scheduling, and NRC construction internally. The application provides data and actions via two traits:
 
-**`ServerHandler`** — required hooks for service handling:
+**`ServerHandler`** - required hooks for service handling:
 
 ```rust
 pub trait ServerHandler {
@@ -205,7 +205,7 @@ pub trait ServerHandler {
     fn write_did(&mut self, did: u16, data: &[u8]) -> Result<(), Self::Error>;
     fn ecu_reset(&mut self, reset_type: u8) -> Result<(), Self::Error>;
 
-    // Optional — default returns NRC 0x11 serviceNotSupported
+    // Optional - default returns NRC 0x11 serviceNotSupported
     fn routine_control(&mut self, ...) -> Result<usize, Self::Error> { Err(...) }
     fn communication_control(&mut self, ...) -> Result<(), Self::Error> { Err(...) }
     fn io_control(&mut self, ...) -> Result<usize, Self::Error> { Err(...) }
@@ -216,7 +216,7 @@ pub trait ServerHandler {
 }
 ```
 
-**`SecurityProvider`** — seed generation and key validation:
+**`SecurityProvider`** - seed generation and key validation:
 
 ```rust
 pub trait SecurityProvider {
@@ -225,7 +225,7 @@ pub trait SecurityProvider {
 }
 ```
 
-**`ServerConfig`** — ODX-style ECU description built with a fluent builder:
+**`ServerConfig`** - ODX-style ECU description built with a fluent builder:
 
 ```rust
 let config = ServerConfig::new(physical_address: 0x0001, functional_address: 0x7DF)
@@ -244,7 +244,7 @@ let config = ServerConfig::new(physical_address: 0x0001, functional_address: 0x7
     });
 ```
 
-The server is driven by three methods — identical in simulation and production:
+The server is driven by three methods - identical in simulation and production:
 
 ```rust
 server.handle(&src_addr, &raw_uds_bytes, now)?;  // process inbound frame
@@ -292,13 +292,13 @@ client.unsubscribe_periodic(0x90);
 
 Deterministic simulation infrastructure. Everything needed to test protocol state machines reproducibly.
 
-**`SimBus<N, Q>`** — message delivery with fault injection. Seeded RNG makes every run reproducible. Configurable faults: message loss, reorder, delay, corruption, timeout.
+**`SimBus<N, Q>`** - message delivery with fault injection. Seeded RNG makes every run reproducible. Configurable faults: message loss, reorder, delay, corruption, timeout.
 
-**`TcpSimBus<N, Q>`** — wraps `SimBus` and adds TCP connection state. The bus owns connection state — nodes don't track it. TCP fault injection: connection refused, mid-session reset, connect timeout.
+**`TcpSimBus<N, Q>`** - wraps `SimBus` and adds TCP connection state. The bus owns connection state — nodes don't track it. TCP fault injection: connection refused, mid-session reset, connect timeout.
 
-**`CanSimBus<N, Q>`** — wraps `SimBus` and adds CAN bus state (Active / ErrorPassive / BusOff). CAN fault injection: arbitration loss, bit error, bus-off.
+**`CanSimBus<N, Q>`** - wraps `SimBus` and adds CAN bus state (Active / ErrorPassive / BusOff). CAN fault injection: arbitration loss, bit error, bus-off.
 
-**`SimNode<N, Q>`** — trait for nodes on the simulation buses:
+**`SimNode<N, Q>`** - trait for nodes on the simulation buses:
 
 ```rust
 pub trait SimNode<const N: usize, const Q: usize> {
@@ -310,15 +310,15 @@ pub trait SimNode<const N: usize, const Q: usize> {
 }
 ```
 
-**`SimNodeErased<N, Q>`** — object-safe version with errors swallowed internally, enabling heterogeneous slices of different node types.
+**`SimNodeErased<N, Q>`** - object-safe version with errors swallowed internally, enabling heterogeneous slices of different node types.
 
-**`SimRunner<N, Q>`** — drives `SimNodeErased` slices over a `SimBus`.
+**`SimRunner<N, Q>`** - drives `SimNodeErased` slices over a `SimBus`.
 
-**`TcpSimRunner<N, Q>`** — drives nodes over a `TcpSimBus`, additionally delivering `TcpEvent`s to nodes implementing `TcpEventHandler`.
+**`TcpSimRunner<N, Q>`** - drives nodes over a `TcpSimBus`, additionally delivering `TcpEvent`s to nodes implementing `TcpEventHandler`.
 
-**`CanSimRunner<N, Q>`** — drives nodes over a `CanSimBus`, additionally delivering `CanEvent`s to nodes implementing `CanEventHandler`.
+**`CanSimRunner<N, Q>`** - drives nodes over a `CanSimBus`, additionally delivering `CanEvent`s to nodes implementing `CanEventHandler`.
 
-**`FaultConfig`** — three presets: `none()`, `light()`, `chaos()`. All probabilities are `(numerator, denominator)` pairs for reproducibility.
+**`FaultConfig`** - three presets: `none()`, `light()`, `chaos()`. All probabilities are `(numerator, denominator)` pairs for reproducibility.
 
 ---
 
@@ -326,11 +326,11 @@ pub trait SimNode<const N: usize, const Q: usize> {
 
 DoIP gateway, ISO-TP bridge node, and DoIP tester.
 
-**`DoipGateway<A, MAX_TESTERS, BUF>`** — gateway state machine. Translates DoIP frames from TCP into UDS bytes on CAN, and CAN responses back into DoIP frames. Has two faces — `handle_tcp` and `handle_can` — because it spans two buses. Routing table maps DoIP logical addresses to CAN IDs.
+**`DoipGateway<A, MAX_TESTERS, BUF>`** - gateway state machine. Translates DoIP frames from TCP into UDS bytes on CAN, and CAN responses back into DoIP frames. Has two faces — `handle_tcp` and `handle_can` — because it spans two buses. Routing table maps DoIP logical addresses to CAN IDs.
 
-**`IsoTpNode<N>`** — bridges raw UDS bytes to ISO-TP CAN frames. Two independent segmenters (request and response directions) to handle concurrent multi-frame exchanges. Key methods: `handle_from_gateway(uds_data)`, `handle_uds_response(uds_data)`, `handle_from_ecu(can_frame)`.
+**`IsoTpNode<N>`** - bridges raw UDS bytes to ISO-TP CAN frames. Two independent segmenters (request and response directions) to handle concurrent multi-frame exchanges. Key methods: `handle_from_gateway(uds_data)`, `handle_uds_response(uds_data)`, `handle_from_ecu(can_frame)`.
 
-**`DoipTester<MAX_CONNECTIONS, MAX_TARGETS>`** — models a physical DoIP tester device. Owns multiple `DoipConnection`s (one per TCP connection). Each connection addresses multiple ECUs simultaneously via `target_address`. P2/P2* timeouts are learned dynamically from `DiagnosticSessionControlResponse`. Events are tagged `(ConnectionId, TargetId, DoipTesterEvent)`.
+**`DoipTester<MAX_CONNECTIONS, MAX_TARGETS>`** - models a physical DoIP tester device. Owns multiple `DoipConnection`s (one per TCP connection). Each connection addresses multiple ECUs simultaneously via `target_address`. P2/P2* timeouts are learned dynamically from `DiagnosticSessionControlResponse`. Events are tagged `(ConnectionId, TargetId, DoipTesterEvent)`.
 
 ```rust
 let mut tester = DoipTester::<4, 8>::new(0x0E00, NodeAddress(0x0E00));
@@ -378,7 +378,7 @@ let config = GatewayConfig::new(0x0E80)
 
 Production OS transport layer. The only `std`-required crate in the workspace.
 
-**`DoipVehicleDriver`** — wraps `DoipTester` with real `TcpStream` and `UdpSocket` transport. Background threads handle blocking I/O. The main application calls `tick()` in a loop.
+**`DoipVehicleDriver`** - wraps `DoipTester` with real `TcpStream` and `UdpSocket` transport. Background threads handle blocking I/O. The main application calls `tick()` in a loop.
 
 ```rust
 let mut driver = DoipVehicleDriver::new(VehicleDriverConfig::default());
@@ -427,7 +427,7 @@ Run with output visible (shows which seed failed):
 cargo test -p ace-tests -- --nocapture --test-threads=1
 ```
 
-Reproduce a specific failing seed — find the seed in the test output then hardcode it temporarily:
+Reproduce a specific failing seed - find the seed in the test output then hardcode it temporarily:
 ```rust
 #[test]
 fn p1_session_control_extended_no_faults() {
@@ -441,7 +441,7 @@ fn p1_session_control_extended_no_faults() {
 
 ## Using the system
 
-### Scenario 1 — UDS ECU in simulation (no transport)
+### Scenario 1 - UDS ECU in simulation (no transport)
 
 ```rust
 use ace_server::{ServerConfig, SessionConfig, ServiceConfig, DidConfig,
@@ -517,7 +517,7 @@ server.drain_outbox(&mut outbox);
 
 ---
 
-### Scenario 2 — Full UDS round-trip in simulation
+### Scenario 2 - Full UDS round-trip in simulation
 
 ```rust
 use ace_tests::fixtures::doip::DoipDstScenario;
@@ -537,7 +537,7 @@ let events = s.drain_events();
 
 ---
 
-### Scenario 3 — Multi-ECU multi-gateway simulation
+### Scenario 3 - Multi-ECU multi-gateway simulation
 
 ```rust
 use ace_tests::fixtures::doip::{
@@ -573,7 +573,7 @@ s.tick_n(500);
 
 ---
 
-### Scenario 4 — Real vehicle connection
+### Scenario 4 - Real vehicle connection
 
 ```rust
 use ace_transport::doip_vehicle_driver::{DoipVehicleDriver, VehicleDriverConfig};
@@ -612,7 +612,7 @@ loop {
 
 ---
 
-### Scenario 5 — Running DST under fault injection
+### Scenario 5 - Running DST under fault injection
 
 ```rust
 use ace_sim::fault::FaultConfig;
@@ -630,7 +630,7 @@ for seed in 0..100u64 {
     s.connect();
     s.tick_n(10_000);
 
-    // Property: no pending requests remain — every exchange resolved
+    // Property: no pending requests remain - every exchange resolved
     for gw in &s.gateways {
         for ecu in &gw.ecus {
             let pending = s.tester.connection_pending_count(gw.conn_id, ecu.logical_address);
@@ -646,16 +646,16 @@ for seed in 0..100u64 {
 
 | Crate | `alloc` | `std` |
 |---|---|---|
-| `ace-core` | `bytes::BytesMut` Writer impl | — |
-| `ace-macros` | — | — |
-| `ace-proto` | — | — |
-| `ace-uds` | inherits from `ace-core` | — |
-| `ace-doip` | inherits | — |
-| `ace-can` | inherits | — |
-| `ace-server` | inherits | — |
-| `ace-client` | inherits | — |
-| `ace-sim` | — | — |
-| `ace-gateway` | inherits | — |
+| `ace-core` | `bytes::BytesMut` Writer impl | - |
+| `ace-macros` | - | — |
+| `ace-proto` | - | — |
+| `ace-uds` | inherits from `ace-core` | - |
+| `ace-doip` | inherits | - |
+| `ace-can` | inherits | - |
+| `ace-server` | inherits | - |
+| `ace-client` | inherits | - |
+| `ace-sim` | - | — |
+| `ace-gateway` | inherits | - |
 | `ace-transport` | required | required |
 
 For embedded targets use `default-features = false` on all crates except `ace-transport`.
