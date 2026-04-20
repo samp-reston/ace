@@ -2,6 +2,13 @@
 name = "ace-doip"
 version = "0.1.0"
 edition = "2024"
+authors = ["Samuel Preston <samp.reston@outlook.com>"]
+description = "DoIP typed message and session layer implementing ISO 13400-2."
+readme = "README.md"
+repository = "https://github.com/samp-reston/ace"
+license = "MIT or Apache-2.0"
+keywords = ["diagnostics", "vehicle", "standards"]
+categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
@@ -9,15 +16,15 @@ alloc = ["ace-core/alloc", "ace-proto/alloc"]
 std = ["alloc", "ace-core/std", "ace-proto/std"]
 
 [dependencies]
-ace-macros = { path = "../ace-macros", default-features = false }
-ace-core = { path = "../ace-core", default-features = false }
-ace-proto = { path = "../ace-proto", default-features = false }
+ace-macros = { version = "0.1.0", default-features = false }
+ace-core = { version = "0.1.0", default-features = false }
+ace-proto = { version = "0.1.0", default-features = false }
 ace-uds = { path = "../ace-uds", default-features = false }
-ace-sim = { path = "../ace-sim", default-features = false }
+ace-sim = { version = "0.1.0", default-features = false }
 bytes = { workspace = true }
 heapless = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-ace-core = { path = "../ace-core", features = ["alloc"] }
+ace-core = { version = "0.1.0", features = ["alloc"] }
 bytes = { workspace = true }
