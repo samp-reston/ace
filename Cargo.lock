@@ -6,21 +6,45 @@ version = 4
 name = "ace-can"
 version = "0.1.0"
 dependencies = [
- "ace-core",
- "ace-proto",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless",
  "proptest",
 ]
 
 [[package]]
+name = "ace-can"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbcca4f56cd4b329df8c15674777bf80f65a26f6b06785ee78d8efcd9ea71e0c"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless",
+]
+
+[[package]]
 name = "ace-client"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f21852c1e516761b0385e9c559c020d9d7fe2e550fc5e7543574f165ef33aad"
 dependencies = [
- "ace-core",
- "ace-proto",
- "ace-server",
- "ace-sim",
- "ace-uds",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
+ "ace-uds 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless",
+]
+
+[[package]]
+name = "ace-client"
+version = "0.1.1"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-server 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
+ "ace-uds 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless",
 ]
 
@@ -33,30 +57,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "ace-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0720fbe98b3d2be93d0be79c180a3a0c8c384052d96e5659259770f4c0c61d9"
+dependencies = [
+ "bytes",
+ "heapless",
+]
+
+[[package]]
 name = "ace-doip"
 version = "0.1.0"
 dependencies = [
- "ace-core",
- "ace-macros",
- "ace-proto",
- "ace-sim",
- "ace-uds",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
+ "ace-uds 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes",
  "heapless",
  "proptest",
 ]
 
 [[package]]
+name = "ace-doip"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a297c7fd890cb6bcbd0648e34e36dec7b49c6f6b0e2815085ad977908e978e7"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
+ "ace-uds 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes",
+ "heapless",
+]
+
+[[package]]
 name = "ace-gateway"
 version = "0.1.0"
 dependencies = [
- "ace-can",
- "ace-client",
- "ace-core",
- "ace-doip",
- "ace-macros",
- "ace-proto",
- "ace-sim",
+ "ace-can 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-client 0.1.0",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-doip 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
  "heapless",
 ]
 
@@ -64,7 +113,7 @@ dependencies = [
 name = "ace-macros"
 version = "0.1.0"
 dependencies = [
- "ace-core",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes",
  "darling",
  "heapless",
@@ -75,10 +124,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "ace-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17a3d2367b0ccc236956609c23ecc394605cebb3b980d6c48949d39312a5d7b5"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "ace-proto"
 version = "0.1.0"
 dependencies = [
- "ace-core",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless",
+]
+
+[[package]]
+name = "ace-proto"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49f6ae852872962e705ea31a192cc2dc4890a8ce4ec85d0e0b90795477aef032"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless",
 ]
 
@@ -86,18 +157,41 @@ dependencies = [
 name = "ace-server"
 version = "0.1.0"
 dependencies = [
- "ace-core",
- "ace-proto",
- "ace-sim",
- "ace-uds",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
+ "ace-uds 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless",
+]
+
+[[package]]
+name = "ace-server"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd69e8c8a17635ad629fefe380c12b9855816835ac5b91294ef7ee5844c62949"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-sim 0.1.0",
+ "ace-uds 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless",
 ]
 
 [[package]]
 name = "ace-sim"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16688665eb2284c801e081742118d166d050b3bfda19a8e3adca2f5616debc7f"
 dependencies = [
- "ace-core",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heapless",
+]
+
+[[package]]
+name = "ace-sim"
+version = "0.1.1"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "heapless",
 ]
 
@@ -105,14 +199,14 @@ dependencies = [
 name = "ace-tests"
 version = "0.1.0"
 dependencies = [
- "ace-can",
- "ace-client",
- "ace-doip",
+ "ace-can 0.1.0",
+ "ace-client 0.1.1",
+ "ace-doip 0.1.0",
  "ace-gateway",
- "ace-proto",
- "ace-server",
- "ace-sim",
- "ace-uds",
+ "ace-proto 0.1.0",
+ "ace-server 0.1.0",
+ "ace-sim 0.1.1",
+ "ace-uds 0.1.0",
  "heapless",
 ]
 
@@ -120,12 +214,25 @@ dependencies = [
 name = "ace-uds"
 version = "0.1.0"
 dependencies = [
- "ace-core",
- "ace-macros",
- "ace-proto",
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes",
  "heapless",
  "proptest",
+]
+
+[[package]]
+name = "ace-uds"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d34bda8dfa475a4d0f62de34f7da2f21d01511796c48c4f6af7bfd94bdabce1"
+dependencies = [
+ "ace-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-macros 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ace-proto 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bytes",
+ "heapless",
 ]
 
 [[package]]
