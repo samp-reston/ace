@@ -2,6 +2,13 @@
 name = "ace-proto"
 version = "0.1.0"
 edition = "2024"
+authors = ["Samuel Preston <samp.reston@outlook.com>"]
+description = "Raw frame wrappers with no protocol knowledge. Provides UDS, DoIP, and CAN Frames with mutable variants."
+readme = "README.md"
+repository = "https://github.com/samp-reston/ace"
+license = "MIT or Apache-2.0"
+keywords = ["diagnostics", "vehicle", "standards"]
+categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
@@ -9,5 +16,5 @@ alloc = ["ace-core/alloc"]
 std = ["alloc", "heapless/defmt", "ace-core/std"]
 
 [dependencies]
-ace-core = { path = "../ace-core", default-features = false }
+ace-core = { version = "0.1.0", default-features = false }
 heapless = { workspace = true }
