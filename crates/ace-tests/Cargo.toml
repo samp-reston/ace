@@ -5,12 +5,12 @@ edition = "2024"
 publish = false
 
 [dependencies]
-ace-sim = { path = "../ace-sim", default-features = false }
-ace-server = { path = "../ace-server", default-features = false }
-ace-client = { path = "../ace-client", default-features = false }
-ace-proto = { path = "../ace-proto", default-features = false }
-ace-uds = { path = "../ace-uds", default-features = false }
-ace-doip = { path = "../ace-doip", default-features = false }
-ace-can = { path = "../ace-can", default-features = false }
-ace-gateway = { path = "../ace-gateway", default-features = false }
+ace-sim = { version = "0.1.0", default-features = false }
+ace-server = { version = "0.1.0", default-features = false }
+ace-client = { version = "0.1.0", default-features = false }
+ace-proto = { version = "0.1.0", default-features = false }
+ace-uds = { version = "0.1.0", default-features = false }
+ace-doip = { version = "0.1.0", default-features = false }
+ace-can = { version = "0.1.0", default-features = false }
+ace-gateway = { version = "0.1.0", default-features = false }
 heapless = { workspace = true }
