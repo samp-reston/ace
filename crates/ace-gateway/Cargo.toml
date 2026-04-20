@@ -2,13 +2,20 @@
 name = "ace-gateway"
 version = "0.1.0"
 edition = "2024"
+authors = ["Samuel Preston <samp.reston@outlook.com>"]
+description = "DoIP Gateway, ISO-TP bridge node, and DoIP Tester"
+readme = "README.md"
+repository = "https://github.com/samp-reston/ace"
+license = "MIT or Apache-2.0"
+keywords = ["diagnostics", "vehicle", "standards"]
+categories = ["development-tools", "network-programming", "automotive"]
 
 [dependencies]
-ace-sim = { path = "../ace-sim", default-features = false }
+ace-sim = { version = "0.1.0", default-features = false }
 ace-doip = { path = "../ace-doip", default-features = false }
-ace-can = { path = "../ace-can", default-features = false }
-ace-proto = { path = "../ace-proto", default-features = false }
-ace-core = { path = "../ace-core", default-features = false }
-ace-macros = { path = "../ace-macros", default-features = false }
-ace-client = { path = "../ace-client", default-features = false }
+ace-can = { version = "0.1.0", default-features = false }
+ace-proto = { version = "0.1.0", default-features = false }
+ace-core = { version = "0.1.0", default-features = false }
+ace-macros = { version = "0.1.0", default-features = false }
+ace-client = { version = "0.1.0", default-features = false }
 heapless = { workspace = true }
