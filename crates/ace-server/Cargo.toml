@@ -2,6 +2,13 @@
 name = "ace-server"
 version = "0.1.0"
 edition = "2024"
+authors = ["Samuel Preston <samp.reston@outlook.com>"]
+description = "UDS ECU server state machine. Handles all session management security access, timing, periodic DID scheduling, and NRC construction."
+readme = "README.md"
+repository = "https://github.com/samp-reston/ace"
+license = "MIT or Apache-2.0"
+keywords = ["diagnostics", "vehicle", "standards"]
+categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
