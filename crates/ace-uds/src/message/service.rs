@@ -152,8 +152,18 @@ pub enum UdsService {
 
 impl ServiceIdentifier {
     pub fn discriminant(&self) -> u8 {
-        // SAFETY: ServiceIdentifier is #[repr(u8)], first byte is always the discriminant
-        unsafe { *((self as *const Self) as *const u8) }
+        match self {
+            ServiceIdentifier::UdsServiceRequest(s) => *s as u8,
+            ServiceIdentifier::NegativeResponse => 0x7F,
+            ServiceIdentifier::NotApplicable(v)
+            | ServiceIdentifier::EmissionsSpecificServiceRequest(v)
+            | ServiceIdentifier::EmissionsSpecificServicePositiveResponse(v)
+            | ServiceIdentifier::UdsServicePositiveResponse(v)
+            | ServiceIdentifier::ServiceRequests(v)
+            | ServiceIdentifier::SystemSupplierServiceRequests(v)
+            | ServiceIdentifier::ServiceRequestsPositiveResponse(v)
+            | ServiceIdentifier::SystemSupplierServiceRequestsPositiveResponse(v) => *v,
+        }
     }
     /// Returns `true` if this service defines a sub-function byte at offset 1.
     ///

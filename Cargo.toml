@@ -3,11 +3,24 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.dependencies]
-heapless = { version = "0.9.2", default-features = false }
-bytes = { version = "1.11.1", default-features = false }
+heapless = { version = "0.9.2" }
+
+bytes = { version = "1.11.1" }
 darling = { version = "0.23.0" }
 proc-macro2 = { version = "1.0.106" }
 quote = { version = "1.0.45" }
 syn = { version = "2.0.117" }
 trybuild = { version = "1.0.116" }
 proptest = { version = "1.10.0" }
+
+ace-core = { path = "crates/ace-core", version = "0.2.0" }
+ace-macros = { path = "crates/ace-macros", version = "0.2.0" }
+ace-proto = { path = "crates/ace-proto", version = "0.2.0" }
+ace-can = { path = "crates/ace-can", version = "0.2.0" }
+ace-sim = { path = "crates/ace-sim", version = "0.2.0" }
+ace-uds = { path = "crates/ace-uds", version = "0.2.0" }
+ace-doip = { path = "crates/ace-doip", version = "0.2.0" }
+ace-server = { path = "crates/ace-server", version = "0.2.0" }
+ace-client = { path = "crates/ace-client", version = "0.2.0" }
+ace-gateway = { path = "crates/ace-gateway", version = "0.2.0" }
+ace-transport = { path = "crates/ace-transport", version = "0.2.0" }

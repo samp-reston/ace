@@ -202,61 +202,77 @@ impl<const N: usize> Segmenter<N> {
                 };
 
                 // region: Single frame
+
                 if sent == 0 && total <= max_sf {
                     let pci = PciFrame::SingleFrame {
                         len: total as u8,
                         data: &self.payload,
                     };
+
                     let pci_len = pci.encode_header(out_buf)?;
                     let end = pci_len + total;
+
                     if out_buf.len() < end {
                         return Err(IsoTpError::FrameTooShort {
                             actual: out_buf.len(),
                         });
                     }
                     out_buf[pci_len..end].copy_from_slice(&self.payload);
+
                     self.state = SegmenterState::Idle;
+
                     return Ok(SegmentResult::Frame { len: end });
                 }
+
                 // endregion: Single frame
 
                 // region: First frame
+
                 if sent == 0 {
                     let pci = PciFrame::FirstFrame {
                         total_len: total as u32,
                         data: &self.payload,
                     };
+
                     let pci_len = pci.encode_header(out_buf)?;
                     let data_in_ff = (max_data - pci_len).min(total);
                     let end = pci_len + data_in_ff;
+
                     if out_buf.len() < end {
                         return Err(IsoTpError::FrameTooShort {
                             actual: out_buf.len(),
                         });
                     }
                     out_buf[pci_len..end].copy_from_slice(&self.payload[..data_in_ff]);
+
                     self.state = SegmenterState::WaitingForFlowControl {
                         next_sequence: 1,
                         sent: data_in_ff,
                     };
+
                     return Ok(SegmentResult::Frame { len: end });
                 }
+
                 // endregion: First frame
 
                 // region: Consecutive frame
+
                 let remaining = &self.payload[sent..];
                 let pci = PciFrame::ConsecutiveFrame {
                     sequence_number: next_sequence,
                     data: remaining,
                 };
+
                 let pci_len = pci.encode_header(out_buf)?;
                 let data_in_cf = (max_data - pci_len).min(remaining.len());
                 let end = pci_len + data_in_cf;
+
                 if out_buf.len() < end {
                     return Err(IsoTpError::FrameTooShort {
                         actual: out_buf.len(),
                     });
                 }
+
                 out_buf[pci_len..end].copy_from_slice(&remaining[..data_in_cf]);
 
                 let new_sent = sent + data_in_cf;
@@ -287,6 +303,7 @@ impl<const N: usize> Segmenter<N> {
                 };
 
                 Ok(SegmentResult::Frame { len: end })
+
                 // endregion: Consecutive frame
             }
         }

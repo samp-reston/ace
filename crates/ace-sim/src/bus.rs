@@ -30,6 +30,7 @@ pub struct Envelope<const N: usize> {
 ///
 /// `N` - max message payload bytes
 /// `Q` - max messages in-flight simultaneously
+#[derive(Debug)]
 pub struct SimBus<const N: usize, const Q: usize> {
     clock: SimClock,
     rng: Xorshift64,
@@ -89,10 +90,11 @@ impl<const N: usize, const Q: usize> SimBus<N, Q> {
     /// Returns `true` if the message was enqueued, `false` if it was dropped by fault injection or
     /// the queue is full
     pub fn send(&mut self, src: NodeAddress, dst: NodeAddress, data: &[u8]) -> bool {
-        if self
+        let r = self
             .rng
-            .chance(self.faults.message_loss.0, self.faults.message_loss.1)
-        {
+            .chance(self.faults.message_loss.0, self.faults.message_loss.1);
+
+        if r {
             return false;
         }
 

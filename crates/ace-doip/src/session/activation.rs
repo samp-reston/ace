@@ -12,6 +12,10 @@
 
 // region: Imports
 
+use ace_proto::doip::constants::{
+    DOIP_ROUTING_ACTIVATION_REQ_ISO_LEN, DOIP_ROUTING_ACTIVATION_REQ_OEM_LEN,
+};
+
 use crate::payload::{
     ActivationCode, ActivationType, RoutingActivationRequest, RoutingActivationResponse,
 };
@@ -187,6 +191,7 @@ impl ActivationLineState {
 /// The gateway creates one instance per TCP connection. The state machine processes
 /// `RoutingActivationRequest` frames and produces `RoutingActivationResponse` frames. It enforces
 /// the activation line state - only `Active` connections may carry `DiagnosticMessage` frames.
+#[derive(Debug)]
 pub struct ActivationStateMachine<A: ActivationAuthProvider> {
     /// Logical address of this gateway entity.
     gateway_address: u16,
@@ -242,14 +247,19 @@ impl<A: ActivationAuthProvider> ActivationStateMachine<A> {
             );
         }
 
-        if !self.state.is_active() {
+        if self.state.is_active() {
             return self.deny(source_address, ActivationDenialReason::AlreadyConnected);
         }
 
         if activation_type == ActivationType::CentralSecurity {
-            let oem_data = &[req.reserved, req.reserved_for_oem].concat();
+            let mut oem_data =
+                [0u8; DOIP_ROUTING_ACTIVATION_REQ_ISO_LEN + DOIP_ROUTING_ACTIVATION_REQ_OEM_LEN];
 
-            match self.auth.authenticate(source_address, oem_data) {
+            let (iso, oem) = oem_data.split_at_mut(DOIP_ROUTING_ACTIVATION_REQ_ISO_LEN);
+            iso.copy_from_slice(&req.reserved);
+            oem.copy_from_slice(&req.reserved_for_oem);
+
+            match self.auth.authenticate(source_address, &oem_data) {
                 Ok(()) => {}
                 Err(reason) => return self.deny(source_address, reason),
             }

@@ -40,7 +40,6 @@ use ace_sim::{
     io::NodeAddress,
     tcp_bus::TcpEvent,
 };
-use heapless::Vec;
 
 // endregion: Imports
 
@@ -150,7 +149,7 @@ impl DoipConnectionConfig {
 
 // region: DoipConnectionPhase
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum DoipConnectionPhase {
     Disconnected,
     ActivationPending,
@@ -166,12 +165,12 @@ pub enum DoipConnectionPhase {
 ///
 /// Each target has its own UdsClient tracking P2/P2* independently. P2/P2* are updated when a
 /// DiagnosticSessionControlResponse arrives from this target.
-struct TargetState {
+pub struct TargetState {
     /// ECU logical address.
-    address: u16,
+    pub address: u16,
 
     /// UDS client for this target - owns P2 timer and event queue.
-    client: UdsClient<1>,
+    pub client: UdsClient<1>,
 
     /// Current P2 timeout - updated from DSC response.
     p2: Duration,
@@ -236,7 +235,7 @@ pub struct DoipConnection<const MAX_TARGETS: usize = 8> {
     tester_address: u16,
 
     /// Per-ECU target state.
-    targets: heapless::Vec<TargetState, MAX_TARGETS>,
+    pub targets: heapless::Vec<TargetState, MAX_TARGETS>,
     outbox: heapless::Vec<(NodeAddress, heapless::Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX>,
     events: heapless::Vec<(ConnectionId, TargetId, DoipTesterEvent), 64>,
 }
@@ -286,6 +285,13 @@ impl<const MAX_TARGETS: usize> DoipConnection<MAX_TARGETS> {
 
     pub fn is_active(&self) -> bool {
         self.phase == DoipConnectionPhase::Active
+    }
+
+    pub fn target_pending_count(&self, target_address: u16) -> Option<usize> {
+        self.targets
+            .iter()
+            .find(|t| t.address == target_address)
+            .map(|t| t.client.pending_count())
     }
 
     fn connection_id(&self) -> ConnectionId {
@@ -572,20 +578,35 @@ impl<const MAX_TARGETS: usize> DoipConnection<MAX_TARGETS> {
     ) -> Result<(), DoipTesterError> {
         let payload_len = 4 + uds_data.len();
         let header = self.make_header(PayloadType::DiagnosticMessage, payload_len as u32);
-
         let gateway = NodeAddress(self.config.gateway_address as u32);
+
+        let mut header_staging = [0u8; 8];
+        let mut header_slice: &mut [u8] = &mut header_staging;
+
+        header
+            .encode(&mut header_slice)
+            .map_err(|_| DoipTesterError::Codec)?;
+
+        // Calculate AFTER encoding
+        let header_len = 8 - header_slice.len();
+
         let mut frame: heapless::Vec<u8, TCP_MAX_FRAME> = heapless::Vec::new();
 
-        {
-            let mut slice = frame.as_mut();
-            header
-                .encode(&mut slice)
-                .map_err(|_| DoipTesterError::Codec)?;
-        }
+        frame
+            .extend_from_slice(&header_staging[..header_len])
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        let _ = frame.extend_from_slice(&self.tester_address.to_be_bytes());
-        let _ = frame.extend_from_slice(&target_address.to_be_bytes());
-        let _ = frame.extend_from_slice(uds_data);
+        frame
+            .extend_from_slice(&self.tester_address.to_be_bytes())
+            .map_err(|_| DoipTesterError::Codec)?;
+
+        frame
+            .extend_from_slice(&target_address.to_be_bytes())
+            .map_err(|_| DoipTesterError::Codec)?;
+
+        frame
+            .extend_from_slice(uds_data)
+            .map_err(|_| DoipTesterError::Codec)?;
 
         self.outbox
             .push((gateway, frame))
@@ -597,29 +618,35 @@ impl<const MAX_TARGETS: usize> DoipConnection<MAX_TARGETS> {
         payload_type: PayloadType,
         payload: &T,
     ) -> Result<(), DoipTesterError> {
-        let mut payload_buf: heapless::Vec<u8, TCP_MAX_FRAME> = heapless::Vec::new();
+        let mut payload_staging = [0u8; TCP_MAX_FRAME];
+        let mut payload_slice: &mut [u8] = &mut payload_staging;
 
-        {
-            let mut slice = payload_buf.as_mut();
-            payload
-                .encode(&mut slice)
-                .map_err(|_| DoipTesterError::Codec)?;
-        }
+        payload
+            .encode(&mut payload_slice)
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        let header = self.make_header(payload_type, payload_buf.len() as u32);
+        let payload_len = TCP_MAX_FRAME - payload_slice.len();
 
+        let header = self.make_header(payload_type, payload_len as u32);
         let gateway = NodeAddress(self.config.gateway_address as u32);
-        let mut frame = Vec::new();
 
-        {
-            let mut slice = frame.as_mut();
-            header
-                .encode(&mut slice)
-                .map_err(|_| DoipTesterError::Codec)?;
-            payload
-                .encode(&mut slice)
-                .map_err(|_| DoipTesterError::Codec)?;
-        }
+        let mut header_staging = [0u8; 8];
+        let mut header_slice: &mut [u8] = &mut header_staging;
+
+        header
+            .encode(&mut header_slice)
+            .map_err(|_| DoipTesterError::Codec)?;
+
+        let header_len = 8 - header_slice.len();
+        let mut frame: heapless::Vec<u8, TCP_MAX_FRAME> = heapless::Vec::new();
+
+        frame
+            .extend_from_slice(&header_staging[..header_len])
+            .map_err(|_| DoipTesterError::Codec)?;
+
+        frame
+            .extend_from_slice(&payload_staging[..payload_len])
+            .map_err(|_| DoipTesterError::Codec)?;
 
         self.outbox
             .push((gateway, frame))
@@ -646,7 +673,7 @@ pub struct DoipTester<const MAX_CONNECTIONS: usize = 8, const MAX_TARGETS: usize
 
     /// NodeAddress of this tester on the simulation TCP bus.
     address: NodeAddress,
-    connections: heapless::Vec<DoipConnection<MAX_TARGETS>, MAX_CONNECTIONS>,
+    pub connections: heapless::Vec<DoipConnection<MAX_TARGETS>, MAX_CONNECTIONS>,
 
     /// Per-gateway metadata profiles accumulated from announcements.
     profiles: heapless::Vec<(u16, DoipNodeProfile), MAX_CONNECTIONS>,
@@ -692,7 +719,7 @@ impl<const MAX_CONNECTIONS: usize, const MAX_TARGETS: usize>
         Ok(id)
     }
 
-    fn find_conn_mut(&mut self, id: ConnectionId) -> Option<&mut DoipConnection<MAX_TARGETS>> {
+    pub fn find_conn_mut(&mut self, id: ConnectionId) -> Option<&mut DoipConnection<MAX_TARGETS>> {
         self.connections.iter_mut().find(|c| c.id() == id)
     }
 
@@ -846,7 +873,8 @@ impl<const MAX_CONNECTIONS: usize, const MAX_TARGETS: usize>
     pub fn drain_events(
         &mut self,
     ) -> impl Iterator<Item = (ConnectionId, TargetId, DoipTesterEvent)> + '_ {
-        let mut all: heapless::Vec<(ConnectionId, TargetId, DoipTesterEvent), 128> = Vec::new();
+        let mut all: heapless::Vec<(ConnectionId, TargetId, DoipTesterEvent), 128> =
+            heapless::Vec::new();
 
         for conn in self.connections.iter_mut() {
             for ev in conn.drain_events() {
@@ -862,6 +890,14 @@ impl<const MAX_CONNECTIONS: usize, const MAX_TARGETS: usize>
             .iter()
             .find(|c| c.id() == id)
             .map(|c| c.phase())
+    }
+
+    pub fn connection_pending_count(&self, id: ConnectionId, target_address: u16) -> usize {
+        self.connections
+            .iter()
+            .find(|c| c.id() == id)
+            .and_then(|conn| conn.target_pending_count(target_address))
+            .unwrap_or(0)
     }
 
     // endregion: Event API

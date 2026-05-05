@@ -2,6 +2,7 @@
 
 use ace_core::DiagError;
 use ace_uds::UdsError;
+use heapless::format;
 
 use crate::header::ProtocolVersion;
 
@@ -54,7 +55,7 @@ impl From<DoipValidationError> for DoipError {
 
 impl From<UdsError> for DoipError {
     fn from(e: UdsError) -> Self {
-        DoipError::Parse(ace_core::diag_err_str(&format!("{:?}", e)))
+        DoipError::Parse(format!("{:?}", e).unwrap_or_default())
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "ace-doip"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "DoIP typed message and session layer implementing ISO 13400-2."
@@ -16,15 +16,15 @@ alloc = ["ace-core/alloc", "ace-proto/alloc"]
 std = ["alloc", "ace-core/std", "ace-proto/std"]
 
 [dependencies]
-ace-macros = { version = "0.1.0", default-features = false }
-ace-core = { version = "0.1.0", default-features = false }
-ace-proto = { version = "0.1.0", default-features = false }
-ace-uds = { version = "0.1.0", default-features = false }
-ace-sim = { version = "0.1.0", default-features = false }
+ace-macros = { workspace = true }
+ace-core = { workspace = true }
+ace-proto = { workspace = true }
+ace-uds = { workspace = true }
+ace-sim = { workspace = true }
 bytes = { workspace = true }
 heapless = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-ace-core = { version = "0.1.0", features = ["alloc"] }
+ace-core = { workspace = true, features = ["std"] }
 bytes = { workspace = true }

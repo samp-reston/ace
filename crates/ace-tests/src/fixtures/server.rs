@@ -18,6 +18,7 @@ use heapless::Vec;
 ///
 /// Stores up to 8 DIDs with up to 64 bytes of data each. All optional hooks return
 /// serviceNotSupported by default.
+#[derive(Debug)]
 pub struct TestHandler {
     dids: Vec<(u16, Vec<u8, 64>), 8>,
 }
@@ -85,6 +86,7 @@ impl ServerHandler for TestHandler {
 ///
 /// Seed is the level byte. Key = seed XOR 0xFF. Deterministic and trivially predictable - suitable
 /// only for testing.
+#[derive(Debug)]
 pub struct TestSecurityProvider;
 
 impl SecurityProvider for TestSecurityProvider {

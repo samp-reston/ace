@@ -1,6 +1,6 @@
 [package]
 name = "ace-sim"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "Deterministic simulation infrastructure. Everything needed to test protocol state machines reproducibly."
@@ -15,5 +15,5 @@ default = []
 std = ["ace-core/std"]
 
 [dependencies]
-ace-core = { version = "0.1.0", default-features = false }
+ace-core = { workspace = true }
 heapless = { workspace = true }

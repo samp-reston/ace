@@ -6,7 +6,7 @@ use ace_macros::{FrameCodec, FrameRead, FrameWrite};
 pub enum SecurityAccessRequest<'a> {
     RequestSeed(RequestSeed<'a>),
     SendKey(SendKey<'a>),
-    IsoSaeReserved,
+    IsoSaeReserved(u8),
     IsoSaeReservedRequestSeed(RequestSeed<'a>),
     IsoSaeReservedSendKey(SendKey<'a>),
     PyroTechnicSecurityRequestSeed(RequestSeed<'a>),
@@ -73,7 +73,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for SecurityAccessRequest<'a> {
             }))?;
 
         match access_type {
-            0x00 | 0x7F => Ok(Self::IsoSaeReserved),
+            0x00 | 0x7F => Ok(Self::IsoSaeReserved(access_type)),
             0x43..=0x5E if access_type % 2 == 1 => {
                 Ok(Self::IsoSaeReservedRequestSeed(RequestSeed::decode(buf)?))
             }
@@ -123,7 +123,7 @@ impl FrameWrite for SecurityAccessRequest<'_> {
             | Self::SystemSupplierSpecificSendKey(inner)
             | Self::PyroTechnicSecuritySendKey(inner)
             | Self::IsoSaeReservedSendKey(inner) => inner.encode(buf),
-            Self::IsoSaeReserved => Ok(()),
+            Self::IsoSaeReserved(inner) => Ok(inner.encode(buf)?),
         }
     }
 }

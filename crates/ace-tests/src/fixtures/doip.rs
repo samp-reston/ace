@@ -6,22 +6,21 @@
 //!     - Helper builders
 
 // region: Imports
+
 use ace_can::IsoTpAddressingMode;
-use ace_client::{SIM_MAX_FRAME, SIM_MAX_OUTBOX};
 use ace_doip::{
     payload::ActivationType,
     session::{ActivationAuthProvider, ActivationDenialReason},
 };
 use ace_gateway::{
     config::{CanNodeEntry, GatewayConfig},
+    ecu_node::{EcuNode, ECU_CAN_FRAME, ECU_CAN_OUT},
     gateway::{DoipGateway, CAN_MAX_FRAME, CAN_MAX_OUTBOX, TCP_MAX_FRAME, TCP_MAX_OUTBOX},
-    isotp_node::{IsoTpNode, ISOTP_MAX_FRAME, ISOTP_MAX_OUT, ISOTP_MAX_UDS},
     tester::{
         ConnectionId, DoipConnectionConfig, DoipConnectionPhase, DoipTester, DoipTesterError,
         DoipTesterEvent, TargetId,
     },
 };
-use ace_server::server::UdsServer;
 use ace_sim::{
     can_bus::{CanFaultConfig, CanSimBus},
     clock::Duration,
@@ -41,7 +40,7 @@ use crate::fixtures::{server::default_server, TestHandler, TestSecurityProvider}
 /// responsibilities:
 ///     - `TestActivationAuthProvider` - DoIP routing activation gate
 ///     - `TestSecurityProvider` - UDS SecurityAccess seed/key
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TestActivationAuthProvider;
 
 impl ActivationAuthProvider for TestActivationAuthProvider {
@@ -111,8 +110,7 @@ pub struct EcuEntry {
 
     /// CAN response ID (ECU -> gateway)
     pub response_can_id: u32,
-    pub isotp: IsoTpNode,
-    pub server: UdsServer<TestHandler, TestSecurityProvider>,
+    pub node: EcuNode<TestHandler, TestSecurityProvider>,
 }
 
 // endregion: EcuEntry
@@ -194,11 +192,15 @@ impl DoipDstScenario {
     /// Must be called before the first tick. The tester will send its `RoutingActivationRequest`
     /// automatically on `ConnectionEstablished`.
     pub fn connect(&mut self) {
-        let tester_addr = NodeAddress(0x0e00);
+        let tester_addr = self.tester.address();
 
-        for gw in &self.gateways {
-            self.tcp_bus
-                .connect(tester_addr.clone(), gw.gateway_addr.clone());
+        let gw_addrs: heapless::Vec<NodeAddress, 8> = self
+            .gateways
+            .iter()
+            .map(|g| g.gateway_addr.clone())
+            .collect();
+        for gw_addr in gw_addrs {
+            self.tcp_bus.connect(tester_addr.clone(), gw_addr);
         }
     }
 
@@ -219,22 +221,26 @@ impl DoipDstScenario {
     ///         e. Route ISO-TP assembled UDS -> gateway CAN face
     ///         f. Collect gateway TCP outbox -> TCP bus (response path)
     pub fn tick(&mut self) {
-        let tester_addr = NodeAddress(0x0E00);
+        let tester_addr = self.tester.address().clone();
         let now = self.tcp_bus.now();
 
         let tcp_delivered = self.tcp_bus.tick(self.config.tcp_tick);
+
         let tcp_events: heapless::Vec<_, 16> = self.tcp_bus.drain_events().collect();
         for event in &tcp_events {
             self.tester.on_tcp_event(event, now);
         }
 
+        for gw in self.gateways.iter_mut() {
+            let _ = gw.gateway.tick(now);
+        }
+
         for envelope in &tcp_delivered {
-            let gw_hit = self
+            if let Some(gw) = self
                 .gateways
                 .iter_mut()
-                .find(|g| g.gateway_addr == envelope.dst);
-
-            if let Some(gw) = gw_hit {
+                .find(|g| g.gateway_addr == envelope.dst)
+            {
                 let _ = gw.gateway.handle_tcp(&envelope.src, &envelope.data, now);
             } else if envelope.dst == tester_addr {
                 let _ = self.tester.handle(&envelope.src, &envelope.data, now);
@@ -248,18 +254,18 @@ impl DoipDstScenario {
             TCP_MAX_OUTBOX,
         > = heapless::Vec::new();
         self.tester.drain_outbox(&mut tester_out);
+
         for (dst, data) in &tester_out {
             self.tcp_bus.send(tester_addr.clone(), dst.clone(), data);
         }
 
         for gw in self.gateways.iter_mut() {
-            let _ = gw.gateway.tick(now);
-
             let mut gw_tcp_out: heapless::Vec<
                 (NodeAddress, heapless::Vec<u8, TCP_MAX_FRAME>),
                 TCP_MAX_OUTBOX,
             > = heapless::Vec::new();
             gw.gateway.drain_tcp_outbox(&mut gw_tcp_out);
+
             for (dst, data) in &gw_tcp_out {
                 self.tcp_bus
                     .send(gw.gateway_addr.clone(), dst.clone(), data);
@@ -270,14 +276,10 @@ impl DoipDstScenario {
                 CAN_MAX_OUTBOX,
             > = heapless::Vec::new();
             gw.gateway.drain_can_outbox(&mut gw_can_out);
+
             for (dst, data) in &gw_can_out {
-                if let Some(ecu) = gw
-                    .ecus
-                    .iter_mut()
-                    .find(|e| NodeAddress(e.request_can_id) == *dst)
-                {
-                    let _ = ecu.isotp.handle_from_gateway(data, now);
-                }
+                self.can_bus
+                    .send(gw.gateway_addr.clone(), dst.clone(), data);
             }
         }
 
@@ -286,57 +288,64 @@ impl DoipDstScenario {
             let can_delivered = self.can_bus.tick(self.config.can_tick);
 
             for gw in self.gateways.iter_mut() {
-                for ecu in gw.ecus.iter_mut() {
-                    for envelope in &can_delivered {
-                        if envelope.dst == NodeAddress(ecu.request_can_id) {
-                            let _ = ecu.isotp.handle_from_gateway(&envelope.data, can_now);
-                        } else if envelope.dst == NodeAddress(ecu.response_can_id) {
-                            let _ = ecu.isotp.handle_from_ecu(&envelope.data, can_now);
+                for envelope in &can_delivered {
+                    let dst_id = envelope.dst.0;
+                    let src_id = envelope.src.0;
+
+                    if let Some(ecu) = gw.ecus.iter_mut().find(|e| e.request_can_id == dst_id) {
+                        let pci = envelope.data.first().copied().unwrap_or(0);
+                        if pci & 0xF0 == 0x30 && src_id != gw.gateway_addr.0 {
+                            let r = gw.gateway.handle_can(
+                                &NodeAddress(dst_id),
+                                &envelope.data,
+                                can_now,
+                            );
+                        } else if src_id == gw.gateway_addr.0 {
+                            let t = ecu.node.handle_can_frame(&envelope.data, can_now);
                         }
                     }
 
-                    let mut isotp_can_out: heapless::Vec<
-                        (NodeAddress, heapless::Vec<u8, ISOTP_MAX_FRAME>),
-                        ISOTP_MAX_OUT,
+                    if let Some(ecu) = gw.ecus.iter_mut().find(|e| e.response_can_id == dst_id) {
+                        let pci = envelope.data.first().copied().unwrap_or(0);
+
+                        if pci & 0xF0 == 0x30 && src_id == gw.gateway_addr.0 {
+                            let v = ecu.node.handle_can_frame(&envelope.data, can_now);
+                        } else if src_id == ecu.response_can_id {
+                            let w = gw.gateway.handle_can(
+                                &NodeAddress(dst_id),
+                                &envelope.data,
+                                can_now,
+                            );
+                        }
+                    }
+                }
+
+                for ecu in gw.ecus.iter_mut() {
+                    let x = ecu.node.tick(can_now);
+                }
+
+                for ecu in gw.ecus.iter_mut() {
+                    let mut ecu_can_out: heapless::Vec<
+                        (NodeAddress, heapless::Vec<u8, ECU_CAN_FRAME>),
+                        ECU_CAN_OUT,
                     > = heapless::Vec::new();
-                    ecu.isotp.drain_can_outbox(&mut isotp_can_out);
-                    for (dst, data) in &isotp_can_out {
+                    ecu.node.drain_can_outbox(&mut ecu_can_out);
+
+                    for (dst, data) in &ecu_can_out {
                         self.can_bus
-                            .send(NodeAddress(ecu.request_can_id), dst.clone(), data);
+                            .send(NodeAddress(ecu.response_can_id), dst.clone(), data);
                     }
+                }
 
-                    let mut isotp_uds_out: heapless::Vec<
-                        (NodeAddress, heapless::Vec<u8, ISOTP_MAX_UDS>),
-                        4,
-                    > = heapless::Vec::new();
-                    ecu.isotp.drain_uds_outbox(&mut isotp_uds_out);
-                    for (_, data) in &isotp_uds_out {
-                        let _ = ecu
-                            .server
-                            .handle(&NodeAddress(ecu.request_can_id), data, can_now);
-                    }
+                let mut gw_can_fc: heapless::Vec<
+                    (NodeAddress, heapless::Vec<u8, CAN_MAX_FRAME>),
+                    CAN_MAX_OUTBOX,
+                > = heapless::Vec::new();
+                gw.gateway.drain_can_outbox(&mut gw_can_fc);
 
-                    let _ = ecu.server.tick(can_now);
-
-                    let mut srv_out: heapless::Vec<
-                        (NodeAddress, heapless::Vec<u8, SIM_MAX_FRAME>),
-                        SIM_MAX_OUTBOX,
-                    > = heapless::Vec::new();
-                    ecu.server.drain_outbox(&mut srv_out);
-                    for (_, data) in &srv_out {
-                        let _ = ecu.isotp.handle_from_ecu(data, can_now);
-                    }
-
-                    let mut isotp_resp_out: heapless::Vec<
-                        (NodeAddress, heapless::Vec<u8, ISOTP_MAX_UDS>),
-                        4,
-                    > = heapless::Vec::new();
-                    ecu.isotp.drain_uds_outbox(&mut isotp_resp_out);
-                    for (_, data) in &isotp_resp_out {
-                        let _ =
-                            gw.gateway
-                                .handle_can(&NodeAddress(ecu.response_can_id), data, can_now);
-                    }
+                for (dst, data) in &gw_can_fc {
+                    self.can_bus
+                        .send(gw.gateway_addr.clone(), dst.clone(), data);
                 }
 
                 let mut gw_tcp_resp: heapless::Vec<
@@ -344,9 +353,9 @@ impl DoipDstScenario {
                     TCP_MAX_OUTBOX,
                 > = heapless::Vec::new();
                 gw.gateway.drain_tcp_outbox(&mut gw_tcp_resp);
+
                 for (dst, data) in &gw_tcp_resp {
-                    let _ = self
-                        .tcp_bus
+                    self.tcp_bus
                         .send(gw.gateway_addr.clone(), dst.clone(), data);
                 }
             }
@@ -420,6 +429,20 @@ impl DoipDstScenario {
     }
 
     // endregion: Convenience Helpers
+
+    pub fn disconnect(&mut self, tester_addr: NodeAddress, gateway_addr: NodeAddress) {
+        self.tcp_bus
+            .disconnect(tester_addr.clone(), gateway_addr.clone());
+
+        let now = self.tcp_bus.now();
+        self.tester.on_tcp_event(
+            &ace_sim::tcp_bus::TcpEvent::ConnectionReset {
+                from: tester_addr,
+                to: gateway_addr,
+            },
+            now,
+        );
+    }
 }
 
 // endregion: DoipDstScenario
@@ -502,6 +525,9 @@ impl GatewayNodeConfig {
 /// # Example - single gateway, two ECUs
 ///
 /// ```no_run
+/// # use ace_tests::fixtures::doip::EcuNodeConfig;
+/// # use ace_tests::fixtures::doip::GatewayNodeConfig;
+/// # use ace_tests::fixtures::doip::DoipDstScenarioBuilder;
 /// let s = DoipDstScenarioBuilder::new(0)
 ///     .with_gateway(GatewayNodeConfig::new(0x0E80, 0x0E00)
 ///         .with_ecu(EcuNodeConfig::new(0x0001, 0x7E0, 0x7E8, 0x7DF))
@@ -513,6 +539,9 @@ impl GatewayNodeConfig {
 /// # Example - two gateways
 ///
 /// ```no_run
+/// # use ace_tests::fixtures::doip::EcuNodeConfig;
+/// # use ace_tests::fixtures::doip::GatewayNodeConfig;
+/// # use ace_tests::fixtures::doip::DoipDstScenarioBuilder;
 /// let s = DoipDstScenarioBuilder::new(0)
 ///     .with_gateway(GatewayNodeConfig::new(0x0E80, 0x0E00)
 ///         .with_ecu(EcuNodeConfig::new(0x0001, 0x7E0, 0x7E8, 0x7DF))
@@ -630,19 +659,21 @@ impl DoipDstScenarioBuilder {
                 .expect("connection slot available");
 
             let mut ecu_entries: heapless::Vec<EcuEntry, 8> = heapless::Vec::new();
+
             for ecu in &gw_config.ecus {
-                let isotp = IsoTpNode::new(
+                let server = default_server(NodeAddress(ecu.logical_address as u32));
+                let node = EcuNode::new(
+                    ecu.logical_address,
                     ecu.request_can_id,
                     ecu.response_can_id,
                     ecu.addressing_mode.clone(),
+                    server,
                 );
-                let server = default_server(NodeAddress(ecu.logical_address as u32));
                 let _ = ecu_entries.push(EcuEntry {
                     logical_address: ecu.logical_address,
                     request_can_id: ecu.request_can_id,
                     response_can_id: ecu.response_can_id,
-                    isotp,
-                    server,
+                    node,
                 });
             }
 

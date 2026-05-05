@@ -1,6 +1,6 @@
 [package]
 name = "ace-server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "UDS ECU server state machine. Handles all session management security access, timing, periodic DID scheduling, and NRC construction."
@@ -16,11 +16,8 @@ alloc = ["ace-core/alloc", "ace-uds/alloc"]
 std = ["alloc", "ace-core/std", "ace-uds/std", "ace-sim/std"]
 
 [dependencies]
-ace-core = { version = "0.1.0", default-features = false }
-ace-uds = { version = "0.1.0", default-features = false }
-ace-sim = { version = "0.1.0", default-features = false }
-ace-proto = { version = "0.1.0", default-features = false }
+ace-core = { workspace = true }
+ace-uds = { workspace = true }
+ace-sim = { workspace = true }
+ace-proto = { workspace = true }
 heapless = { workspace = true }
-
-[dev-dependencies]
-ace-sim = { version = "0.1.0", features = ["std"] }

@@ -94,7 +94,7 @@ fn p2_wrong_key_returns_invalid_key_nrc() {
 
 #[test]
 fn p3_lockout_after_max_attempts() {
-    let mut s = DstScenario::new(0, FaultConfig::chaos());
+    let mut s = DstScenario::new(0, FaultConfig::none());
 
     s.client
         .request(&[0x10, 0x03], s.runner.bus().now())

@@ -1,0 +1,3 @@
+shared-version = true
+allow-branch = ["main"]
+# pre-release-hook = ["cargo", "test", "--workspace"]

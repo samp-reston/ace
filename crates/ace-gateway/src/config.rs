@@ -1,7 +1,7 @@
 // region: Imports
 
 use ace_can::IsoTpAddressingMode;
-use ace_doip::{payload::ActivationType, session::ConnectionConfig};
+use ace_doip::{header::ProtocolVersion, payload::ActivationType, session::ConnectionConfig};
 
 // endregion: Imports
 
@@ -39,6 +39,9 @@ pub struct GatewayConfig {
     /// DoIP logical address of this gateway entity.
     pub logical_address: u16,
 
+    /// DoIP Protocol Version to use for frame assembly.
+    pub protocol_version: ProtocolVersion,
+
     /// ECU nodes reachable through this gateway.
     pub nodes: heapless::Vec<CanNodeEntry, 16>,
 
@@ -65,6 +68,7 @@ impl GatewayConfig {
 
         Self {
             logical_address,
+            protocol_version: ProtocolVersion::Iso13400_2012,
             nodes: heapless::Vec::new(),
             registered_testers: heapless::Vec::new(),
             supported_activation_types: supported,

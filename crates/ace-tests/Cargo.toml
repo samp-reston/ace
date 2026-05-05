@@ -1,16 +1,16 @@
 [package]
 name = "ace-tests"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-ace-sim = { path = "../ace-sim", default-features = false }
-ace-server = { path = "../ace-server", default-features = false }
-ace-client = { path = "../ace-client", default-features = false }
-ace-proto = { path = "../ace-proto", default-features = false }
-ace-uds = { path = "../ace-uds", default-features = false }
-ace-doip = { path = "../ace-doip", default-features = false }
-ace-can = { path = "../ace-can", default-features = false }
-ace-gateway = { path = "../ace-gateway", default-features = false }
+ace-sim = { workspace = true }
+ace-server = { workspace = true }
+ace-client = { workspace = true }
+ace-proto = { workspace = true }
+ace-uds = { workspace = true }
+ace-doip = { workspace = true }
+ace-can = { workspace = true }
+ace-gateway = { workspace = true }
 heapless = { workspace = true }

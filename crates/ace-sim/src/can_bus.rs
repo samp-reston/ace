@@ -124,6 +124,7 @@ pub enum CanEvent {
 ///
 /// `N` - max frame payload bytes (8 for classic CAN, 64 for CAN FD)
 /// `Q` - max frames in-flight simultaneously
+#[derive(Debug)]
 pub struct CanSimBus<const N: usize, const Q: usize> {
     /// Underlying message bus.
     inner: SimBus<N, Q>,
