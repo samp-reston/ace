@@ -1,6 +1,6 @@
 [package]
 name = "ace-core"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "Foundation layer, providing three codec traits that the rest of ACE builds on: FrameRead, FrameWrite, Writer"

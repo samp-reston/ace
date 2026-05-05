@@ -1,6 +1,6 @@
 [package]
 name = "ace-can"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "ISO-TP implementation. Provides the reassembler and segmenter used by an IsoTpNode to bridge DoIP UDS payloads to CAN frames."

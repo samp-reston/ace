@@ -1,6 +1,6 @@
 [package]
 name = "ace-macros"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "Proc-macro crate. Provides FrameCodec which generates FrameRead and FrameWrite impls for structs and enums."
