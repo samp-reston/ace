@@ -1,5 +1,7 @@
 // region: UdsError
 
+use heapless::format;
+
 #[derive(Debug)]
 pub enum UdsError {
     Transport(ace_core::DiagError),
@@ -49,15 +51,13 @@ impl From<UdsError> for ace_core::DiagError {
             UdsError::Transport(diag) => diag,
             UdsError::Parse(msg) => ace_core::DiagError::InvalidFrame(msg),
             UdsError::NegativeResponse(nrc) => ace_core::DiagError::InvalidFrame(
-                heapless::String::try_from(format!("negative response: {nrc}").as_str())
-                    .unwrap_or_default(),
+                format!("negative response: {nrc}").unwrap_or_default(),
             ),
             UdsError::ResponsePending => ace_core::DiagError::InvalidFrame(
                 heapless::String::try_from("response pending").unwrap_or_default(),
             ),
             UdsError::Validation(e) => ace_core::DiagError::InvalidFrame(
-                heapless::String::try_from(format!("validation error: {e}").as_str())
-                    .unwrap_or_default(),
+                format!("validation error: {e}").unwrap_or_default(),
             ),
         }
     }

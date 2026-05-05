@@ -1,0 +1,18 @@
+[package]
+name = "ace-transport"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ace-gateway = { workspace = true }
+ace-sim = { workspace = true }
+ace-doip = { workspace = true }
+heapless = { workspace = true }
+
+[dev-dependencies]
+ace-client = { workspace = true }
+ace-gateway = { workspace = true }
+
+[[example]]
+name = "connect_to_vehicle"

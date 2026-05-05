@@ -16,12 +16,11 @@ alloc = ["ace-core/alloc", "ace-uds/alloc"]
 std = ["alloc", "ace-core/std", "ace-uds/std", "ace-sim/std"]
 
 [dependencies]
-ace-core = { version = "0.1.0", default-features = false }
-ace-proto = { version = "0.1.0", default-features = false }
-ace-uds = { version = "0.1.0", default-features = false }
-ace-sim = { version = "0.1.0", default-features = false }
+ace-core = { workspace = true }
+ace-proto = { workspace = true }
+ace-uds = { workspace = true }
+ace-sim = { workspace = true }
 heapless = { workspace = true }
 
 [dev-dependencies]
-ace-sim = { version = "0.1.0", features = ["std"] }
-ace-server = { version = "0.1.0", features = ["std"] }
+ace-server = { workspace = true }

@@ -26,16 +26,17 @@ impl<'a> ace_core::codec::FrameRead<'a> for DtcGroup {
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let bytes = ace_core::codec::take_n(buf, 3).map_err(|e| UdsError::from(e))?;
         let value = u32::from_be_bytes([0, bytes[0], bytes[1], bytes[2]]);
+
         let group = match value {
             0x000000..=0x0000FF => DtcGroup::Reserved([bytes[0], bytes[1], bytes[2]]),
-            0x000100..=0x00FEFF => {
+            0x000100..=0xFFFEFF => {
                 DtcGroup::VehicleManufacturerSpecific([bytes[0], bytes[1], bytes[2]])
             }
-            0x00FF00..=0x00FFFE => {
+            0xFFFF00..=0xFFFFFE => {
                 let functional_group = FunctionalGroup::decode(&mut &[bytes[2]][..])?;
                 DtcGroup::FunctionalGroup(functional_group)
             }
-            0x00FFFF => DtcGroup::All,
+            0xFFFFFF => DtcGroup::All,
             val => return Err(UdsError::Validation(ValidationError::InvalidDtcGroup(val))),
         };
         Ok(group)
@@ -52,7 +53,7 @@ impl ace_core::codec::FrameWrite for DtcGroup {
             DtcGroup::FunctionalGroup(fg) => {
                 let mut tmp = [0u8; 1];
                 fg.encode(&mut tmp.as_mut_slice())?;
-                [0xFF, 0xFF, tmp[0]]
+                [0x00, 0xFF, tmp[0]]
             }
             DtcGroup::All => [0xFF, 0xFF, 0xFF],
         };

@@ -142,6 +142,7 @@ pub enum TcpEvent {
 ///
 /// `N` - max message payload bytes
 /// `Q` - max messages in-flight simultaneously
+#[derive(Debug)]
 pub struct TcpSimBus<const N: usize, const Q: usize> {
     /// Underlying message bus - handles delivery, delays, and message faults.
     inner: SimBus<N, Q>,

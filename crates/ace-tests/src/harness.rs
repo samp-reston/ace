@@ -96,10 +96,7 @@ pub fn expect_positive(client: &mut UdsClient<1>, sid: u8) -> Vec<u8, 256> {
         .drain_events()
         .find_map(|e| match e {
             ClientEvent::PositiveResponse { sid: s, data } if s == sid => Some(data),
-            _ => {
-                dbg!(e);
-                None
-            }
+            _ => None,
         })
         .unwrap_or_else(|| panic!("expected positive response for SID 0x{:02X}", sid))
 }

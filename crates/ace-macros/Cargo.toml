@@ -25,6 +25,6 @@ syn = { workspace = true }
 
 [dev-dependencies]
 trybuild = { workspace = true }
-ace-core = { version = "0.1.0", default-features = false }
+ace-core = { workspace = true }
 heapless = { workspace = true }
 bytes = { workspace = true }

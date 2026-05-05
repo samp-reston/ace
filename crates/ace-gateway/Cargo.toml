@@ -11,11 +11,12 @@ keywords = ["diagnostics", "vehicle", "standards"]
 categories = ["development-tools", "network-programming", "automotive"]
 
 [dependencies]
-ace-sim = { version = "0.1.0", default-features = false }
-ace-doip = { version = "0.1.0", default-features = false }
-ace-can = { version = "0.1.0", default-features = false }
-ace-proto = { version = "0.1.0", default-features = false }
-ace-core = { version = "0.1.0", default-features = false }
-ace-macros = { version = "0.1.0", default-features = false }
-ace-client = { version = "0.1.0", default-features = false }
+ace-sim = { workspace = true }
+ace-doip = { workspace = true }
+ace-can = { workspace = true }
+ace-proto = { workspace = true }
+ace-core = { workspace = true }
+ace-macros = { workspace = true }
+ace-client = { workspace = true }
+ace-server = { workspace = true }
 heapless = { workspace = true }

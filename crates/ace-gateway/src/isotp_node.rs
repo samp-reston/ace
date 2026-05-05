@@ -63,10 +63,11 @@ pub struct IsoTpNode<const N: usize = ISOTP_MAX_UDS> {
     /// This node's own NodeAddress on the CAN sim bus.
     address: NodeAddress,
     reassembler: Reassembler<N>,
-    segmenter: Segmenter<N>,
+    req_segmenter: Segmenter<N>,
+    resp_segmenter: Segmenter<N>,
 
     /// Outbound CAN frames for the CAN bus.
-    can_outbox: heapless::Vec<(NodeAddress, heapless::Vec<u8, ISOTP_MAX_FRAME>), ISOTP_MAX_OUT>,
+    pub can_outbox: heapless::Vec<(NodeAddress, heapless::Vec<u8, ISOTP_MAX_FRAME>), ISOTP_MAX_OUT>,
 
     /// Outbound UDS bytes for the UdsServer.
     uds_outbox: heapless::Vec<(NodeAddress, heapless::Vec<u8, N>), 4>,
@@ -88,7 +89,8 @@ impl<const N: usize> IsoTpNode<N> {
             response_can_id,
             address,
             reassembler: Reassembler::new(rsm_config),
-            segmenter: Segmenter::new(seg_config),
+            req_segmenter: Segmenter::new(seg_config.clone()),
+            resp_segmenter: Segmenter::new(seg_config),
             can_outbox: heapless::Vec::new(),
             uds_outbox: heapless::Vec::new(),
         }
@@ -100,60 +102,43 @@ impl<const N: usize> IsoTpNode<N> {
 
     // region: Gateway -> ECU Path
 
-    /// REceives raw UDS bytes from the gateway and segments them into CAN frames addressed to the
+    /// Receives raw UDS bytes from the gateway and segments them into CAN frames addressed to the
     /// ECU.
     pub fn handle_from_gateway(
         &mut self,
         uds_data: &[u8],
         _now: Instant,
     ) -> Result<(), IsoTpNodeError> {
-        // We need a static lifetime for the segmenter payload - copy into a fixed buffer. In
-        // production the segmenter would hold a reference to the gateway's frame buffer.
-        let mut payload_buf = [0u8; N];
-        let len = uds_data.len().min(N);
-        payload_buf[..len].copy_from_slice(&uds_data[..len]);
-
-        // SAFETY: payload_buf lives for the duration of this call. The segmenter is reset after
-        // all frames are drained. In a production system this would be a borrowed reference into
-        // the gateway's receive buffer with a matching lifetime.
-        //
-        // For simulation correctness all frames are drained synchronously before this function
-        // returns, so no dangling reference occurs.
-        let payload_ref: &'static [u8] =
-            unsafe { core::slice::from_raw_parts(payload_buf.as_ptr(), len) };
-
-        self.segmenter
-            .start(payload_ref)
+        self.req_segmenter
+            .start(uds_data)
             .map_err(IsoTpNodeError::Segmenter)?;
 
-        let mut out_buf = [0u8; ISOTP_MAX_FRAME];
-
-        loop {
-            match self
-                .segmenter
-                .next_frame(&mut out_buf)
-                .map_err(IsoTpNodeError::Segmenter)?
-            {
-                SegmentResult::Complete => break,
-                SegmentResult::WaitForFlowControl => break,
-                SegmentResult::Frame { len } => {
-                    let ecu_addr = NodeAddress(self.response_can_id);
-                    let mut frame: heapless::Vec<u8, ISOTP_MAX_FRAME> = heapless::Vec::new();
-
-                    let _ = frame.extend_from_slice(&out_buf[..len]);
-                    self.can_outbox
-                        .push((ecu_addr, frame))
-                        .map_err(|_| IsoTpNodeError::OutboxFull)?;
-                }
-            }
-        }
-
-        Ok(())
+        let ecu_rx_addr = NodeAddress(self.response_can_id);
+        Self::drain_segmenter(&mut self.req_segmenter, ecu_rx_addr, &mut self.can_outbox)
     }
 
     // endregion: Gateway -> ECU Path
 
     // region: ECU -> Gateway Path
+
+    /// Segments raw UDS response bytes from the UdsServer outbox into CAN frames addressed to
+    /// `request_can_id` (the gateway's receive CAN ID).
+    ///
+    /// This is the correct entry point for UdsServer outbox data - NOT `handle_from_ecu` which
+    /// expectes reassebled CAN frames, not UDS bytes.
+    pub fn handle_uds_response(
+        &mut self,
+        uds_data: &[u8],
+        _now: Instant,
+    ) -> Result<(), IsoTpNodeError> {
+        self.resp_segmenter
+            .start(uds_data)
+            .map_err(IsoTpNodeError::Segmenter)?;
+
+        // Response CAN frames are address to gateway's receive ID
+        let gw_rx_addr = NodeAddress(self.request_can_id);
+        Self::drain_segmenter(&mut self.resp_segmenter, gw_rx_addr, &mut self.can_outbox)
+    }
 
     /// Receives a CAN frame fro mthe ECU (via the reassembler) and produces reassembled UDS bytes
     /// for the gateway.
@@ -238,6 +223,39 @@ impl<const N: usize> IsoTpNode<N> {
     }
 
     // endregion: Outbox Drains
+
+    // region: Internal helpers
+
+    fn drain_segmenter(
+        segmenter: &mut Segmenter<N>,
+        dst: NodeAddress,
+        can_outbox: &mut heapless::Vec<
+            (NodeAddress, heapless::Vec<u8, ISOTP_MAX_FRAME>),
+            ISOTP_MAX_OUT,
+        >,
+    ) -> Result<(), IsoTpNodeError> {
+        let mut out_buf = [0u8; ISOTP_MAX_FRAME];
+        loop {
+            match segmenter
+                .next_frame(&mut out_buf)
+                .map_err(IsoTpNodeError::Segmenter)?
+            {
+                SegmentResult::Complete => break,
+                SegmentResult::WaitForFlowControl => break,
+                SegmentResult::Frame { len } => {
+                    let mut frame: heapless::Vec<u8, ISOTP_MAX_FRAME> = heapless::Vec::new();
+                    let _ = frame.extend_from_slice(&out_buf[..len]);
+                    can_outbox
+                        .push((dst.clone(), frame))
+                        .map_err(|_| IsoTpNodeError::OutboxFull)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // endregion: Internal helpers
 }
 
 // endregion: IsoTpNode

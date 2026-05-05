@@ -12,15 +12,17 @@ categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
-alloc = ["ace-core/alloc", "ace-proto/alloc"]
+alloc = ["ace-core/alloc", "ace-proto/alloc", "dep:bytes"]
 std = ["alloc", "ace-core/std", "ace-proto/std"]
 
 [dependencies]
-ace-macros = { version = "0.1.0", default-features = false }
-ace-core = { version = "0.1.0", default-features = false }
-ace-proto = { version = "0.1.0", default-features = false }
+ace-macros = { workspace = true }
+ace-core = { workspace = true }
+ace-proto = { workspace = true }
 heapless = { workspace = true }
-bytes = { workspace = true }
+bytes = { workspace = true, optional = true }
 
 [dev-dependencies]
+bytes = { workspace = true }
+ace-core = { workspace = true, features = ["alloc"] }
 proptest = { workspace = true }

@@ -108,6 +108,7 @@ pub enum ConnectionEvent<const BUF: usize = 4096> {
 ///
 /// Owns the `ActivationStateMachine` for this connection and tracks idle/alive-check timing. The
 /// gateway drives this via `handle_frame` and `tick`.
+#[derive(Debug)]
 pub struct ConnectionState<A: ActivationAuthProvider, const BUF: usize = 4096> {
     config: ConnectionConfig,
     phase: ConnectionPhase,

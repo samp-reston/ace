@@ -201,6 +201,7 @@ impl PeriodicState {
 ///
 /// All timing is driven by [`tick`] - no blocking, no hardware timers,
 /// no OS calls. Suitable for direct use as a `SimNode` in `ace-sim`.
+#[derive(Debug)]
 pub struct UdsServer<H, S>
 where
     H: ServerHandler,
@@ -429,6 +430,7 @@ where
         let mut frame: Vec<u8, MAX_FRAME> = Vec::new();
         let _ = frame.push(request_sid | 0x40);
         let _ = frame.extend_from_slice(payload);
+
         self.enqueue(dst.clone(), frame)
     }
 

@@ -9,6 +9,6 @@ alloc = []
 
 [dependencies]
 ace-macros = { path = ".." }
-ace-core = { version = "0.1.0", features = ["alloc"] }
+ace-core = { workspace = true, features = ["alloc"] }
 heapless = { workspace = true }
 bytes = { workspace = true }

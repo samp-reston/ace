@@ -27,6 +27,7 @@ pub struct PendingRoute {
 /// Tracks in-flight forwarded requests awaiting CAN responses.
 ///
 /// `N` - max concurrent pending routes (matches max tester connections).
+#[derive(Debug)]
 pub struct PendingRouteTable<const N: usize> {
     entries: heapless::Vec<PendingRoute, N>,
 }

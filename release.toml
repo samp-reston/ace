@@ -1,0 +1,2 @@
+shared-version = true
+# pre-release-hook = ["cargo", "test", "--workspace"]
