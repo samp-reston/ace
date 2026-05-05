@@ -1,6 +1,6 @@
 [package]
 name = "ace-uds"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "UDS typed message layer implementing ISO 14229-1."
