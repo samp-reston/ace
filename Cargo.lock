@@ -3,6 +3,22 @@
 version = 4
 
 [[package]]
+name = "ace-api"
+version = "0.5.3"
+dependencies = [
+ "ace-can",
+ "ace-client",
+ "ace-core",
+ "ace-doip",
+ "ace-gateway",
+ "ace-macros",
+ "ace-proto",
+ "ace-server",
+ "ace-sim",
+ "ace-uds",
+]
+
+[[package]]
 name = "ace-can"
 version = "0.5.3"
 dependencies = [
@@ -105,7 +121,7 @@ dependencies = [
 name = "ace-tests"
 version = "0.5.3"
 dependencies = [
- "aced",
+ "ace-api",
  "heapless",
 ]
 
@@ -113,7 +129,7 @@ dependencies = [
 name = "ace-transport"
 version = "0.5.3"
 dependencies = [
- "aced",
+ "ace-api",
 ]
 
 [[package]]
@@ -127,22 +143,6 @@ dependencies = [
  "heapless",
  "proptest",
  "serde",
-]
-
-[[package]]
-name = "aced"
-version = "0.5.3"
-dependencies = [
- "ace-can",
- "ace-client",
- "ace-core",
- "ace-doip",
- "ace-gateway",
- "ace-macros",
- "ace-proto",
- "ace-server",
- "ace-sim",
- "ace-uds",
 ]
 
 [[package]]
