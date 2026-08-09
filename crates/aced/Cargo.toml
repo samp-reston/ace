@@ -1,5 +1,5 @@
 [package]
-name = "aced"
+name = "ace-api"
 version = "0.5.3"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
@@ -9,6 +9,9 @@ repository = "https://github.com/samp-reston/ace"
 license = "MIT or Apache-2.0"
 keywords = ["diagnostics", "vehicle", "standards"]
 categories = ["development-tools", "network-programming", "automotive"]
+
+[lib]
+name = "aced"
 
 [features]
 default = ["alloc"]
