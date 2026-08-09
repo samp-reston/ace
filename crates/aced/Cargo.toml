@@ -1,6 +1,6 @@
 [package]
 name = "ace-api"
-version = "0.5.3"
+version = "0.5.5"
 edition = "2024"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "Batteries-included entry point for the ACE diagnostics stack, alloc-enabled by default. For no_std/embedded use, depend on the individual ace-* crates directly."
