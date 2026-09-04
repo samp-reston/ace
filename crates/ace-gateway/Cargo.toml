@@ -32,3 +32,6 @@ ace-core = { workspace = true }
 ace-macros = { workspace = true }
 ace-client = { workspace = true }
 ace-server = { workspace = true }
+
+[dev-dependencies]
+heapless = { workspace = true }

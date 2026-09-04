@@ -2,7 +2,8 @@
 
 use ace_core::Vec;
 use ace_proto::{common::RawFrame, UdsFrame};
-use ace_sim::{clock::Instant, io::NodeAddress};
+use ace_sim::clock::{Duration, Instant};
+use ace_sim::io::NodeAddress;
 use ace_uds::ext::UdsFrameExt;
 
 use crate::{config::ClientConfig, event::ClientEvent, pending::PendingRequest, ClientError};
@@ -57,6 +58,25 @@ impl<
             events: Vec::new(),
             periodic_dids: Vec::new(),
         }
+    }
+
+    /// Update the client's P2 and P2* timeouts, e.g. after learning them
+    /// from a `DiagnosticSessionControlResponse`.
+    ///
+    /// `tolerance` is added to both values before they take effect. Per
+    /// [`ClientConfig`]'s own guidance, the client timeout "should match or
+    /// slightly exceed" the server's advertised timing - applying the
+    /// server's value verbatim risks spurious timeouts on a client whose
+    /// clock or transport runs slightly behind the server's. A `tolerance`
+    /// of [`Duration::from_millis(0)`] applies the values verbatim.
+    ///
+    /// Does not affect any [`PendingRequest`] already in flight - those keep
+    /// the deadline they were created or extended with. Only requests sent
+    /// after this call use the new timeout.
+    pub fn set_timing(&mut self, p2: Duration, p2_extended: Duration, tolerance: Duration) {
+        self.config.p2_timeout = Duration::from_micros(p2.as_micros() + tolerance.as_micros());
+        self.config.p2_extended_timeout =
+            Duration::from_micros(p2_extended.as_micros() + tolerance.as_micros());
     }
 
     // region: SimNode Surface
