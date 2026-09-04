@@ -3,12 +3,12 @@ use crate::{
     header::{PayloadType, ProtocolVersion},
 };
 use ace_proto::{
+    DoipFrame, DoipFrameMut,
     common::{RawFrame, RawFrameMut},
     doip::constants::{
         DOIP_HEADER_LEN, DOIP_INV_VERSION_OFFSET, DOIP_LENGTH_OFFSET, DOIP_TYPE_OFFSET,
         DOIP_VERSION_OFFSET,
     },
-    DoipFrame, DoipFrameMut,
 };
 
 // region: DoipFrameExt

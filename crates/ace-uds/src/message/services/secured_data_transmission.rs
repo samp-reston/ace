@@ -1,6 +1,6 @@
+use crate::UdsError;
 use crate::message::DiagError;
 use crate::message::{FrameRead, FrameWrite};
-use crate::UdsError;
 use ace_macros::{FrameCodec, FrameWrite};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameWrite)]

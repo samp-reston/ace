@@ -13,22 +13,22 @@ use ace_sim::node::SimNode;
 // region: SimNode for UdsServer
 
 impl<
-        const MAX_FRAME: usize,
-        const MAX_OUTBOX: usize,
-        const MAX_SESSIONS: usize,
-        const MAX_SERVICES: usize,
-        const MAX_DIDS: usize,
-        const MAX_SECURITY_LEVELS: usize,
-        const DEFAULT_S3: u64,
-        const DEFAULT_P2: u64,
-        const DEFAULT_P2_EXT: u64,
-        const DEFAULT_LOCKOUT: u64,
-        const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
-        const MAX_SEED: usize,
-        const MAX_PERIODIC: usize,
-        H,
-        S,
-    > SimNode<MAX_FRAME, MAX_OUTBOX>
+    const MAX_FRAME: usize,
+    const MAX_OUTBOX: usize,
+    const MAX_SESSIONS: usize,
+    const MAX_SERVICES: usize,
+    const MAX_DIDS: usize,
+    const MAX_SECURITY_LEVELS: usize,
+    const DEFAULT_S3: u64,
+    const DEFAULT_P2: u64,
+    const DEFAULT_P2_EXT: u64,
+    const DEFAULT_LOCKOUT: u64,
+    const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
+    const MAX_SEED: usize,
+    const MAX_PERIODIC: usize,
+    H,
+    S,
+> SimNode<MAX_FRAME, MAX_OUTBOX>
     for UdsServer<
         MAX_FRAME,
         MAX_OUTBOX,

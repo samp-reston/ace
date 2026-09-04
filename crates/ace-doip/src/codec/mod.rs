@@ -8,8 +8,8 @@ pub mod tokio_codec;
 
 use crate::error::DoipValidationError;
 use crate::ext::DoipFrameExt;
-use ace_proto::doip::constants::DOIP_HEADER_LEN;
 use ace_proto::doip::DoipFrame;
+use ace_proto::doip::constants::DOIP_HEADER_LEN;
 
 // endregion: Imports
 

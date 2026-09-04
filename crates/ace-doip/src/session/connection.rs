@@ -129,12 +129,12 @@ pub struct ConnectionState<
 }
 
 impl<
-        const UDS_MAX_FRAME: usize,
-        const CONNECTION_MAX_EVENTS: usize,
-        const MAX_TESTERS: usize,
-        const MAX_ACTIVATION_TYPES: usize,
-        A: ActivationAuthProvider,
-    > ConnectionState<UDS_MAX_FRAME, CONNECTION_MAX_EVENTS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>
+    const UDS_MAX_FRAME: usize,
+    const CONNECTION_MAX_EVENTS: usize,
+    const MAX_TESTERS: usize,
+    const MAX_ACTIVATION_TYPES: usize,
+    A: ActivationAuthProvider,
+> ConnectionState<UDS_MAX_FRAME, CONNECTION_MAX_EVENTS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>
 {
     pub fn new(
         config: ConnectionConfig,

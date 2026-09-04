@@ -112,7 +112,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for CommunicationType {
             val => {
                 return Err(UdsError::Validation(
                     ValidationError::InvalidCommunicationTypeValue(val),
-                ))
+                ));
             }
         };
 
@@ -121,7 +121,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for CommunicationType {
             val => {
                 return Err(UdsError::Validation(
                     ValidationError::InvalidCommunicationReserved(val),
-                ))
+                ));
             }
         };
 

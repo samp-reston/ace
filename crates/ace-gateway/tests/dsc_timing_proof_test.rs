@@ -130,8 +130,8 @@ fn dsc_positive_response() -> [u8; 6] {
 }
 
 fn new_connection() -> Connection {
-    let config = DoipConnectionConfig::new(ECU_ADDRESS)
-        .with_timing_tolerance(Duration::from_millis(0)); // verbatim, for a precise assertion
+    let config =
+        DoipConnectionConfig::new(ECU_ADDRESS).with_timing_tolerance(Duration::from_millis(0)); // verbatim, for a precise assertion
     let mut config = config;
     config.default_p2 = Duration::from_millis(DEFAULT_P2_MS);
     DoipConnection::new(TESTER_ADDRESS, config)
@@ -142,7 +142,10 @@ fn activate(conn: &mut Connection, now: Instant) {
     let frame = routing_activation_success_frame(TESTER_ADDRESS, ECU_ADDRESS);
     conn.handle(&frame, now)
         .expect("activation frame should be accepted");
-    assert!(conn.is_active(), "connection should be Active after activation");
+    assert!(
+        conn.is_active(),
+        "connection should be Active after activation"
+    );
     let _ = conn.drain_events();
 }
 
@@ -195,7 +198,9 @@ fn dsc_learned_p2_is_applied_to_the_live_client() {
     // learned P2 (800ms). If the learned value was not applied, this tick
     // will emit Timeout for the second request - proving the defect. If it
     // was applied, no timeout should fire here.
-    now = Instant::from_micros(now.as_micros() + Duration::from_millis(DEFAULT_P2_MS + 50).as_micros());
+    now = Instant::from_micros(
+        now.as_micros() + Duration::from_millis(DEFAULT_P2_MS + 50).as_micros(),
+    );
     conn.tick(now);
     assert!(
         !saw_timeout(&mut conn),

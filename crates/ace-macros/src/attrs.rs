@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{
-    parse::{Parse, ParseStream},
     DeriveInput, Expr, Token,
+    parse::{Parse, ParseStream},
 };
 
 // region: Container

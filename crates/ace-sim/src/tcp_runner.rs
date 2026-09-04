@@ -48,11 +48,11 @@ pub struct TcpSimRunner<
 }
 
 impl<
-        const MAX_DATA: usize,
-        const MAX_QUEUED: usize,
-        const TCP_MAX_EVENTS: usize,
-        const MAX_OUTBOX: usize,
-    > TcpSimRunner<MAX_DATA, MAX_QUEUED, TCP_MAX_EVENTS, MAX_OUTBOX>
+    const MAX_DATA: usize,
+    const MAX_QUEUED: usize,
+    const TCP_MAX_EVENTS: usize,
+    const MAX_OUTBOX: usize,
+> TcpSimRunner<MAX_DATA, MAX_QUEUED, TCP_MAX_EVENTS, MAX_OUTBOX>
 {
     pub fn new(bus: TcpSimBus<MAX_DATA, MAX_QUEUED, TCP_MAX_EVENTS>) -> Self {
         Self { bus }

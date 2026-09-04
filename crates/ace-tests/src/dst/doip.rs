@@ -17,10 +17,10 @@ use aced::sim::{clock::Duration, io::NodeAddress, tcp_bus::TcpEvent};
 
 use crate::{
     fixtures::{
-        doip::{DoipDstScenario, TestActivationAuthProvider, GATEWAY_ADDR},
         TestHandler, TestSecurityProvider,
+        doip::{DoipDstScenario, GATEWAY_ADDR, TestActivationAuthProvider},
     },
-    harness::{assert_session, TESTER_ADDR},
+    harness::TESTER_ADDR,
 };
 
 // endregion: Imports

@@ -1,14 +1,10 @@
 // region: Imports
 
-use aced::sim::clock::Duration;
 use aced::sim::fault::FaultConfig;
 
 use crate::{
     dst::{MAX_TICKS, TICK_MS},
-    harness::{
-        assert_security, assert_session, expect_nrc, expect_positive, DstScenario, ECU_ADDR,
-        SEEDS_BASELINE, TESTER_ADDR,
-    },
+    harness::{DstScenario, SEEDS_BASELINE, assert_security, expect_nrc, expect_positive},
 };
 
 // endregion: Imports

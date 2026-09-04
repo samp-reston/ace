@@ -1,6 +1,6 @@
 // region: Imports
 
-use crate::{client::UdsClient, ClientError};
+use crate::{ClientError, client::UdsClient};
 use ace_core::Vec;
 use ace_sim::node::SimNode;
 
@@ -9,13 +9,13 @@ use ace_sim::node::SimNode;
 // region: SimNode for UdsClient
 
 impl<
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    > SimNode<SIM_MAX_FRAME, SIM_MAX_OUTBOX>
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+> SimNode<SIM_MAX_FRAME, SIM_MAX_OUTBOX>
     for UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
     type Error = ClientError;

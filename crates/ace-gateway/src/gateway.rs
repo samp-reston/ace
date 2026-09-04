@@ -177,19 +177,19 @@ pub struct DoipGateway<
 }
 
 impl<
-        const CAN_MAX_FRAME: usize,
-        const ISOTP_MAX_NODES: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const CAN_MAX_OUTBOX: usize,
-        const MAX_TESTERS: usize,
-        const MAX_FRAME: usize,
-        const UDS_MAX_FRAME: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        const MAX_ACTIVATION_TYPES: usize,
-        const MAX_NODES: usize,
-        A,
-    >
+    const CAN_MAX_FRAME: usize,
+    const ISOTP_MAX_NODES: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const CAN_MAX_OUTBOX: usize,
+    const MAX_TESTERS: usize,
+    const MAX_FRAME: usize,
+    const UDS_MAX_FRAME: usize,
+    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_ACTIVATION_TYPES: usize,
+    const MAX_NODES: usize,
+    A,
+>
     DoipGateway<
         CAN_MAX_FRAME,
         ISOTP_MAX_NODES,

@@ -30,7 +30,7 @@ use core::time::Duration;
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream, UdpSocket},
-    sync::mpsc::{self, channel, Receiver, Sender},
+    sync::mpsc::{self, Receiver, Sender, channel},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 

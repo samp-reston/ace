@@ -80,11 +80,11 @@ pub struct IsoTpNode<
 }
 
 impl<
-        const UDS_MAX_FRAME: usize,
-        const ISOTP_MAX_FRAME: usize,
-        const ISOTP_MAX_OUT: usize,
-        const UDS_MAX_OUTBOX: usize,
-    > IsoTpNode<UDS_MAX_FRAME, ISOTP_MAX_FRAME, ISOTP_MAX_OUT, UDS_MAX_OUTBOX>
+    const UDS_MAX_FRAME: usize,
+    const ISOTP_MAX_FRAME: usize,
+    const ISOTP_MAX_OUT: usize,
+    const UDS_MAX_OUTBOX: usize,
+> IsoTpNode<UDS_MAX_FRAME, ISOTP_MAX_FRAME, ISOTP_MAX_OUT, UDS_MAX_OUTBOX>
 {
     pub fn new(
         request_can_id: u32,

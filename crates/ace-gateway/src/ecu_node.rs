@@ -21,10 +21,10 @@ use ace_can::{
 };
 use ace_core::Vec;
 use ace_server::{
+    NrcError,
     handler::ServerHandler,
     security_provider::SecurityProvider,
     server::{ServerError, UdsServer},
-    NrcError,
 };
 use ace_sim::{clock::Instant, io::NodeAddress};
 
@@ -108,24 +108,24 @@ pub struct EcuNode<
 }
 
 impl<
-        const UDS_MAX_FRAME: usize,
-        const UDS_MAX_OUTBOX: usize,
-        const CAN_MAX_FRAME: usize,
-        const CAN_MAX_OUTBOX: usize,
-        const MAX_SESSIONS: usize,
-        const MAX_SERVICES: usize,
-        const MAX_DIDS: usize,
-        const MAX_SECURITY_LEVELS: usize,
-        const DEFAULT_S3: u64,
-        const DEFAULT_P2: u64,
-        const DEFAULT_P2_EXT: u64,
-        const DEFAULT_LOCKOUT: u64,
-        const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
-        const MAX_SEED: usize,
-        const MAX_PERIODIC: usize,
-        H,
-        S,
-    >
+    const UDS_MAX_FRAME: usize,
+    const UDS_MAX_OUTBOX: usize,
+    const CAN_MAX_FRAME: usize,
+    const CAN_MAX_OUTBOX: usize,
+    const MAX_SESSIONS: usize,
+    const MAX_SERVICES: usize,
+    const MAX_DIDS: usize,
+    const MAX_SECURITY_LEVELS: usize,
+    const DEFAULT_S3: u64,
+    const DEFAULT_P2: u64,
+    const DEFAULT_P2_EXT: u64,
+    const DEFAULT_LOCKOUT: u64,
+    const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
+    const MAX_SEED: usize,
+    const MAX_PERIODIC: usize,
+    H,
+    S,
+>
     EcuNode<
         UDS_MAX_FRAME,
         UDS_MAX_OUTBOX,

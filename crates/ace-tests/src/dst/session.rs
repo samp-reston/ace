@@ -2,13 +2,13 @@
 
 use aced::client::event::ClientEvent;
 use aced::core::Vec;
-use aced::sim::{clock::Duration, fault::FaultConfig};
+use aced::sim::fault::FaultConfig;
 
 use crate::{
     dst::{MAX_TICKS, TICK_MS},
     harness::{
-        assert_session, expect_nrc, expect_positive, DstScenario, SEEDS_BASELINE, SEEDS_CHAOS,
-        SEEDS_LIGHT,
+        DstScenario, SEEDS_BASELINE, SEEDS_CHAOS, SEEDS_LIGHT, assert_session, expect_nrc,
+        expect_positive,
     },
 };
 

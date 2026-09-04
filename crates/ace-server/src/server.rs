@@ -5,10 +5,10 @@ use ace_proto::uds::UdsFrame;
 use ace_sim::clock::{Duration, Instant};
 use ace_sim::io::NodeAddress;
 use ace_uds::ext::UdsFrameExt;
-use ace_uds::message::service::UdsServiceRequest;
 use ace_uds::message::ServiceIdentifier;
+use ace_uds::message::service::UdsServiceRequest;
 
-use crate::config::{periodic, ServerConfig, SessionConfig};
+use crate::config::{ServerConfig, SessionConfig, periodic};
 use crate::handler::ServerHandler;
 use crate::nrc::NrcError;
 use crate::security_provider::SecurityProvider;
@@ -223,22 +223,22 @@ pub struct UdsServer<
 }
 
 impl<
-        const MAX_FRAME: usize,
-        const MAX_OUTBOX: usize,
-        const MAX_SESSIONS: usize,
-        const MAX_SERVICES: usize,
-        const MAX_DIDS: usize,
-        const MAX_SECURITY_LEVELS: usize,
-        const DEFAULT_S3: u64,
-        const DEFAULT_P2: u64,
-        const DEFAULT_P2_EXT: u64,
-        const DEFAULT_LOCKOUT: u64,
-        const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
-        const MAX_SEED: usize,
-        const MAX_PERIODIC: usize,
-        H,
-        S,
-    >
+    const MAX_FRAME: usize,
+    const MAX_OUTBOX: usize,
+    const MAX_SESSIONS: usize,
+    const MAX_SERVICES: usize,
+    const MAX_DIDS: usize,
+    const MAX_SECURITY_LEVELS: usize,
+    const DEFAULT_S3: u64,
+    const DEFAULT_P2: u64,
+    const DEFAULT_P2_EXT: u64,
+    const DEFAULT_LOCKOUT: u64,
+    const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
+    const MAX_SEED: usize,
+    const MAX_PERIODIC: usize,
+    H,
+    S,
+>
     UdsServer<
         MAX_FRAME,
         MAX_OUTBOX,
@@ -546,7 +546,7 @@ where
                     0x10,
                     H::Error::incorrect_message_length_or_invalid_format(),
                     now,
-                )
+                );
             }
         };
 
@@ -600,7 +600,7 @@ where
                     0x11,
                     H::Error::incorrect_message_length_or_invalid_format(),
                     now,
-                )
+                );
             }
         };
 
@@ -629,7 +629,7 @@ where
                     0x27,
                     H::Error::incorrect_message_length_or_invalid_format(),
                     now,
-                )
+                );
             }
         };
 

@@ -5,7 +5,7 @@ use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
 use crate::{
-    attrs::{get_repr, ContainerAttrs, VariantAttrs},
+    attrs::{ContainerAttrs, VariantAttrs, get_repr},
     util::{compile_error, has_lifetime},
 };
 
@@ -65,7 +65,7 @@ pub fn derive(input: DeriveInput) -> TokenStream {
                 return compile_error(
                     proc_macro2::Span::call_site(),
                     "FrameCodec repr conversions: variants must be unit or newtype(T)",
-                )
+                );
             }
         };
 

@@ -7,7 +7,7 @@ pub use payload::UdsPayload;
 pub use service::ServiceIdentifier;
 pub use services::*;
 
-use crate::{constants::MIN_FRAME_LEN, UdsError, ValidationError};
+use crate::{UdsError, ValidationError, constants::MIN_FRAME_LEN};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UdsMessage<'a> {

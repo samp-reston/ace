@@ -1,12 +1,11 @@
 // region: Imports
 
 use aced::client::event::ClientEvent;
-use aced::sim::clock::Duration;
 use aced::sim::fault::FaultConfig;
 
 use crate::{
     dst::{MAX_TICKS, TICK_MS},
-    harness::{expect_periodic, expect_positive, DstScenario},
+    harness::{DstScenario, expect_periodic, expect_positive},
 };
 
 // endregion: Imports

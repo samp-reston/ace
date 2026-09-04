@@ -1,4 +1,4 @@
-use crate::{message::DataIdentifier, UdsError};
+use crate::{UdsError, message::DataIdentifier};
 use ace_core::{DiagError, FrameIter};
 use ace_macros::FrameCodec;
 

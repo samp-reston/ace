@@ -27,7 +27,7 @@ pub fn derive(
             return compile_error(
                 proc_macro2::Span::call_site(),
                 "FrameCodec requires named fields",
-            )
+            );
         }
     };
 

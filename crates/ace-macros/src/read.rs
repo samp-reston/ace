@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
-use crate::attrs::{get_repr, ContainerAttrs, FieldAttrs, VariantAttrs};
+use crate::attrs::{ContainerAttrs, FieldAttrs, VariantAttrs, get_repr};
 use crate::util::{compile_error, has_lifetime};
 
 // region: Entry point
@@ -42,7 +42,7 @@ fn derive_struct(
             return compile_error(
                 proc_macro2::Span::call_site(),
                 "FrameRead requires named fields",
-            )
+            );
         }
     };
 
@@ -207,7 +207,7 @@ fn derive_enum(
                 return compile_error(
                     proc_macro2::Span::call_site(),
                     "FrameRead enum variants must be newtype(T) or unit",
-                )
+                );
             }
         };
 

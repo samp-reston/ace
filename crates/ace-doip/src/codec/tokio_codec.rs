@@ -5,7 +5,7 @@ pub mod tokio_codec {
     use tokio_util::codec::Decoder;
 
     use crate::{
-        codec::{decode_frame, DecodeOutcome, FrameLimits},
+        codec::{DecodeOutcome, FrameLimits, decode_frame},
         error::DoipValidationError,
     };
 

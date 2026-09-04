@@ -10,7 +10,7 @@ use crate::constants::{
 use crate::error::{UdsError, ValidationError};
 use crate::message::ServiceIdentifier;
 use crate::message::UdsMessage;
-use crate::message::{decode_message, NegativeResponseCode};
+use crate::message::{NegativeResponseCode, decode_message};
 
 // region: UdsFrameExt
 

@@ -2,15 +2,13 @@
 
 use aced::core::Vec;
 use aced::server::{
+    BuiltinNrc,
     config::{DidConfig, SecurityLevelConfig, ServerConfig, ServiceConfig, SessionConfig},
     handler::ServerHandler,
     security_provider::{SecurityError, SecurityProvider},
     server::UdsServer,
-    BuiltinNrc,
 };
 use aced::sim::{clock::Duration, io::NodeAddress};
-
-use crate::harness::MyUdsServer;
 
 // endregion: Imports
 

@@ -4,7 +4,7 @@
 extern crate alloc;
 
 pub mod codec;
-pub use codec::{take_n, FrameCodec, FrameRead, FrameWrite, Writer};
+pub use codec::{FrameCodec, FrameRead, FrameWrite, Writer, take_n};
 
 pub mod iter;
 pub use iter::FrameIter;

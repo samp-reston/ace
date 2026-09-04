@@ -1,4 +1,4 @@
-use crate::{message::DataIdentifier, UdsError};
+use crate::{UdsError, message::DataIdentifier};
 use ace_macros::FrameCodec;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]

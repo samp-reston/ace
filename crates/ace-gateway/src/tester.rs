@@ -18,7 +18,7 @@
 // region: Imports
 
 // use crate::gateway::{TCP_MAX_FRAME, TCP_MAX_OUTBOX};
-use ace_client::{client::UdsClient, config::ClientConfig, event::ClientEvent, ClientError};
+use ace_client::{ClientError, client::UdsClient, config::ClientConfig, event::ClientEvent};
 use ace_core::{FrameRead, FrameWrite, Vec};
 use ace_doip::{
     error::DoipError,
@@ -30,10 +30,10 @@ use ace_doip::{
     },
 };
 use ace_proto::{
+    DoipFrame,
     doip::constants::{
         DOIP_COMMON_EID_LEN, DOIP_COMMON_VIN_LEN, DOIP_VEHICLE_ANNOUNCEMENT_GID_LEN,
     },
-    DoipFrame,
 };
 use ace_sim::{
     clock::{Duration, Instant},
@@ -212,13 +212,13 @@ pub struct TargetState<
 }
 
 impl<
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    > TargetState<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+> TargetState<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
     fn new(
         address: u16,
@@ -320,22 +320,22 @@ pub struct DoipConnection<
 }
 
 impl<
-        // region: DoipConnection Constants
-        const MAX_TARGETS: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        // endregion: DoipConnection Constants
+    // region: DoipConnection Constants
+    const MAX_TARGETS: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const MAX_CONNECTION_EVENTS: usize,
+    // endregion: DoipConnection Constants
 
-        // region: Target Constants
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_TARGET_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-        // endregion: Target Constants
-    >
+    // region: Target Constants
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_TARGET_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+    // endregion: Target Constants
+>
     DoipConnection<
         MAX_TARGETS,
         TCP_MAX_FRAME,
@@ -892,18 +892,18 @@ pub struct DoipTester<
 }
 
 impl<
-        const MAX_CONNECTIONS: usize,
-        const MAX_TARGETS: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_TARGET_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    >
+    const MAX_CONNECTIONS: usize,
+    const MAX_TARGETS: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const MAX_CONNECTION_EVENTS: usize,
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_TARGET_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+>
     DoipTester<
         MAX_CONNECTIONS,
         MAX_TARGETS,

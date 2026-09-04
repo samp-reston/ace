@@ -1,4 +1,4 @@
-use crate::{message::FunctionalGroup, UdsError};
+use crate::{UdsError, message::FunctionalGroup};
 use ace_core::{DiagError, FrameIter};
 use ace_macros::FrameCodec;
 

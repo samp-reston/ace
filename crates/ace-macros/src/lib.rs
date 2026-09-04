@@ -6,7 +6,7 @@ mod util;
 mod write;
 
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, Data, DeriveInput};
+use syn::{Data, DeriveInput, parse_macro_input};
 
 /// Derives `ace_uds::codec::FrameRead` for a struct or enum.
 ///

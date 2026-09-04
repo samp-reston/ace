@@ -1,12 +1,12 @@
 // region: Imports
 
 use ace_core::Vec;
-use ace_proto::{common::RawFrame, UdsFrame};
+use ace_proto::{UdsFrame, common::RawFrame};
 use ace_sim::clock::{Duration, Instant};
 use ace_sim::io::NodeAddress;
 use ace_uds::ext::UdsFrameExt;
 
-use crate::{config::ClientConfig, event::ClientEvent, pending::PendingRequest, ClientError};
+use crate::{ClientError, config::ClientConfig, event::ClientEvent, pending::PendingRequest};
 
 // endregion: Imports
 
@@ -39,13 +39,13 @@ pub struct UdsClient<
 }
 
 impl<
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    > UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+> UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
     pub fn new(config: ClientConfig, address: NodeAddress) -> Self {
         let server = NodeAddress(config.target_address as u32);

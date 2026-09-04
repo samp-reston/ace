@@ -30,7 +30,7 @@ use aced::sim::{
     tcp_bus::{TcpFaultConfig, TcpSimBus},
 };
 
-use crate::fixtures::{server::default_server, TestHandler, TestSecurityProvider};
+use crate::fixtures::{TestHandler, TestSecurityProvider, server::default_server};
 
 // endregion: Imports
 
@@ -333,36 +333,36 @@ pub struct DoipDstScenario<
 }
 
 impl<
-        const MAX_DATA: usize,
-        const MAX_QUEUED: usize,
-        const TCP_MAX_EVENTS: usize,
-        const MAX_GATEWAY_ADDRS: usize,
-        const MAX_EVENTS: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const CAN_MAX_FRAME: usize,
-        const CAN_MAX_OUTBOX: usize,
-        const MAX_GATEWAYS: usize,
-        const ISOTP_MAX_NODES: usize,
-        const MAX_TESTERS: usize,
-        const MAX_FRAME: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        const MAX_ACTIVATION_TYPES: usize,
-        const UDS_MAX_FRAME: usize,
-        const UDS_MAX_OUTBOX: usize,
-        const MAX_SESSIONS: usize,
-        const MAX_SERVICES: usize,
-        const MAX_DIDS: usize,
-        const MAX_SECURITY_LEVELS: usize,
-        const MAX_NODES: usize,
-        const DEFAULT_S3: u64,
-        const DEFAULT_P2: u64,
-        const DEFAULT_P2_EXT: u64,
-        const DEFAULT_LOCKOUT: u64,
-        const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
-        const MAX_SEED: usize,
-        const MAX_PERIODIC: usize,
-    >
+    const MAX_DATA: usize,
+    const MAX_QUEUED: usize,
+    const TCP_MAX_EVENTS: usize,
+    const MAX_GATEWAY_ADDRS: usize,
+    const MAX_EVENTS: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const CAN_MAX_FRAME: usize,
+    const CAN_MAX_OUTBOX: usize,
+    const MAX_GATEWAYS: usize,
+    const ISOTP_MAX_NODES: usize,
+    const MAX_TESTERS: usize,
+    const MAX_FRAME: usize,
+    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_ACTIVATION_TYPES: usize,
+    const UDS_MAX_FRAME: usize,
+    const UDS_MAX_OUTBOX: usize,
+    const MAX_SESSIONS: usize,
+    const MAX_SERVICES: usize,
+    const MAX_DIDS: usize,
+    const MAX_SECURITY_LEVELS: usize,
+    const MAX_NODES: usize,
+    const DEFAULT_S3: u64,
+    const DEFAULT_P2: u64,
+    const DEFAULT_P2_EXT: u64,
+    const DEFAULT_LOCKOUT: u64,
+    const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
+    const MAX_SEED: usize,
+    const MAX_PERIODIC: usize,
+>
     DoipDstScenario<
         MAX_DATA,
         MAX_QUEUED,

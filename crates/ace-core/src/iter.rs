@@ -1,8 +1,8 @@
 use core::marker::PhantomData;
 
 use crate::{
-    codec::{FrameRead, FrameWrite, Writer},
     DiagError,
+    codec::{FrameRead, FrameWrite, Writer},
 };
 
 // region: FrameIter
