@@ -118,6 +118,13 @@ pub struct DoipConnectionConfig {
     /// Default P2* timeout before a DSC response is received.
     pub default_p2_star: Duration,
 
+    /// Margin added to server-advertised P2/P2* timing once learned from a
+    /// `DiagnosticSessionControlResponse`, before it is applied to the live
+    /// client. Per ISO 14229-1 the client timeout should match or slightly
+    /// exceed the server's, so this should not be zero in production;
+    /// `Duration::from_millis(0)` applies the learned values verbatim.
+    pub timing_tolerance: Duration,
+
     /// DoIP Protocol version to use for all outbound frames.
     pub protocol_version: ProtocolVersion,
 }
@@ -130,6 +137,7 @@ impl DoipConnectionConfig {
             oem_data: [0u8; 4],
             default_p2: Duration::from_millis(500),
             default_p2_star: Duration::from_millis(5_000),
+            timing_tolerance: Duration::from_millis(50),
             protocol_version: ProtocolVersion::Iso13400_2012,
         }
     }
@@ -141,6 +149,11 @@ impl DoipConnectionConfig {
 
     pub fn with_oem_data(mut self, data: [u8; 4]) -> Self {
         self.oem_data = data;
+        self
+    }
+
+    pub fn with_timing_tolerance(mut self, tolerance: Duration) -> Self {
+        self.timing_tolerance = tolerance;
         self
     }
 }
@@ -192,6 +205,10 @@ pub struct TargetState<
 
     /// Current P2* timeout - updated from DSC response.
     p2_star: Duration,
+
+    /// Margin applied to server-advertised timing before it takes effect on
+    /// `client`. See [`DoipConnectionConfig::timing_tolerance`].
+    timing_tolerance: Duration,
 }
 
 impl<
@@ -203,7 +220,12 @@ impl<
         const MAX_DATA: usize,
     > TargetState<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
-    fn new(address: u16, default_p2: Duration, default_p2_star: Duration) -> Self {
+    fn new(
+        address: u16,
+        default_p2: Duration,
+        default_p2_star: Duration,
+        timing_tolerance: Duration,
+    ) -> Self {
         let config = ClientConfig::new(0, address)
             .with_p2_timeout(default_p2)
             .with_p2_extended_timeout(default_p2_star);
@@ -213,13 +235,17 @@ impl<
             client: UdsClient::new(config, NodeAddress(address as u32)),
             p2: default_p2,
             p2_star: default_p2_star,
+            timing_tolerance,
         }
     }
 
-    /// Updates P2/P2* from a DiagnosticSessionControlResponse payload.
+    /// Updates P2/P2* from a DiagnosticSessionControlResponse payload, and
+    /// applies the learned values to the live [`UdsClient`] used for every
+    /// subsequent request to this target.
     ///
-    /// DSC response payload after SID: [session_type, p2_high, p2_low, p2ext_high, p2ext_low] p2
-    /// is in ms, p2ext is in units of 10ms.
+    /// DSC response payload after SID: [session_type, p2_high, p2_low, p2ext_high, p2ext_low].
+    /// `p2` is in whole milliseconds; `p2ext` is in units of 10ms per
+    /// ISO 14229-1, so it must be multiplied by 10 to get milliseconds.
     fn update_timing_from_dsc(&mut self, uds_payload: &[u8]) {
         if uds_payload.len() < 5 {
             return;
@@ -235,8 +261,11 @@ impl<
             uds_payload.get(4).copied().unwrap_or(0),
         ]);
 
-        self.p2 = Duration::from_millis(p2_ms as u64);
-        self.p2_star = Duration::from_millis(p2ext_10ms as u64);
+        self.p2 = Duration::from_millis(u64::from(p2_ms));
+        self.p2_star = Duration::from_millis(u64::from(p2ext_10ms) * 10);
+
+        self.client
+            .set_timing(self.p2, self.p2_star, self.timing_tolerance);
     }
 }
 
@@ -347,6 +376,7 @@ impl<
             target_address,
             self.config.default_p2,
             self.config.default_p2_star,
+            self.config.timing_tolerance,
         ));
     }
 
@@ -501,15 +531,14 @@ impl<
             let uds_events: Vec<ClientEvent<MAX_DATA>, MAX_TARGET_EVENTS> =
                 target.client.drain_events().collect();
 
+            // Note: a DiagnosticSessionControl positive response (SID 0x10)
+            // is never observed here. It arrives via on_diagnostic_message
+            // on the frame-handling path, which drains target.client's
+            // event queue on arrival - see the DSC timing comment there.
+            // tick() only advances P2/P2* timers and drains timer-driven
+            // events (e.g. Timeout), so a SID-0x10 check here would be dead
+            // code by construction.
             for e in uds_events {
-                if let ClientEvent::PositiveResponse {
-                    sid: 0x10,
-                    ref data,
-                } = e
-                {
-                    target.update_timing_from_dsc(data);
-                }
-
                 let _ = self.events.push((
                     connection_id,
                     TargetId(target.address),
@@ -597,22 +626,27 @@ impl<
 
         self.ensure_target(source);
 
+        let conn_id = self.connection_id();
+        let target_id = TargetId(u16::from(source));
+
         if let Some(target) = self.find_target_mut(source) {
             let _ = target
                 .client
                 .handle(&NodeAddress(source as u32), uds_data, now);
 
-            let conn_id = self.connection_id();
-            let target_id = TargetId(u16::from(source));
+            let client_events: Vec<ClientEvent<MAX_DATA>, MAX_TARGET_EVENTS> =
+                target.client.drain_events().collect();
 
-            let mut client_events = Vec::<ClientEvent<MAX_DATA>, MAX_TARGET_EVENTS>::new();
-
-            if let Some(target) = self.find_target_mut(source) {
-                let _ = target
-                    .client
-                    .handle(&NodeAddress(source as u32), uds_data, now);
-
-                client_events.extend(target.client.drain_events());
+            // The DSC response is delivered here, on the frame-arrival path
+            // - never through tick(), which only re-drains target.client's
+            // queue on a timer and finds nothing left once handle() above
+            // has already consumed it. This is the only place a
+            // PositiveResponse{sid: 0x10} event is ever actually observed,
+            // so this is where learned P2/P2* timing must be applied.
+            for client_event in &client_events {
+                if let ClientEvent::PositiveResponse { sid: 0x10, data } = client_event {
+                    target.update_timing_from_dsc(data);
+                }
             }
 
             for client_event in client_events {

@@ -76,6 +76,7 @@ dependencies = [
  "ace-proto",
  "ace-server",
  "ace-sim",
+ "heapless",
 ]
 
 [[package]]
