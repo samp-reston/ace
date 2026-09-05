@@ -18,7 +18,10 @@ use aced::sim::{clock::Duration, io::NodeAddress, tcp_bus::LinkEvent};
 use crate::{
     fixtures::{
         TestHandler, TestSecurityProvider,
-        doip::{DoipDstScenario, GATEWAY_ADDR, TestActivationAuthProvider},
+        doip::{
+            DoipDstScenario, DoipDstScenarioBuilder, EcuNodeConfig, GATEWAY_ADDR,
+            GatewayNodeConfig, TestActivationAuthProvider,
+        },
     },
     harness::TESTER_ADDR,
 };
@@ -177,6 +180,134 @@ fn p2_dsc_extended_round_trip_no_faults() {
 }
 
 // endregion: P2
+
+// region: P7 - functional addressing fans out to every ECU
+
+/// DoIP functional group address, in the range ISO 13400-2 reserves for
+/// vehicle-manufacturer-defined functional groups (0xE400..=0xEFFF).
+const FUNCTIONAL_TARGET: u16 = 0xE400;
+
+const ECU_ONE: u16 = 0x0001;
+const ECU_TWO: u16 = 0x0002;
+const ECU_THREE: u16 = 0x0003;
+
+/// Three ECUs behind one gateway, all listening on the same functional CAN identifier.
+///
+/// Note that the functional CAN identifier (0x7EF) and the servers' functional UDS
+/// address (0x7DF) deliberately differ: the ECU node translates between them, so this
+/// also proves the server is not comparing CAN identifiers.
+fn three_ecu_scenario(seed: u64) -> MyDoipDstScenario {
+    DoipDstScenarioBuilder::<MAX_GATEWAYS, MAX_NODES>::new(seed)
+        .with_gateway(
+            GatewayNodeConfig::new(GATEWAY_ADDR, crate::fixtures::doip::TESTER_ADDR)
+                .with_ecu(EcuNodeConfig::new(ECU_ONE, 0x7E0, 0x7E8, 0x7EF))
+                .with_ecu(EcuNodeConfig::new(ECU_TWO, 0x7E1, 0x7E9, 0x7EF))
+                .with_ecu(EcuNodeConfig::new(ECU_THREE, 0x7E2, 0x7EA, 0x7EF)),
+        )
+        .build()
+}
+
+/// Session type of one ECU, by logical address.
+fn session_of(s: &MyDoipDstScenario, logical_address: u16) -> u8 {
+    s.gateways
+        .iter()
+        .flat_map(|gw| gw.ecus.iter())
+        .find(|ecu| ecu.logical_address == logical_address)
+        .expect("ecu present in scenario")
+        .node
+        .server
+        .session_type()
+}
+
+/// P7: a functionally addressed request reaches every ECU behind the gateway.
+///
+/// Asserted on ECU state rather than on responses, because state cannot be faked by a
+/// single ECU answering N times: three separate servers each changed session, so all
+/// three received the request.
+#[test]
+fn p7_functional_request_reaches_every_ecu() {
+    for seed in 0..5u64 {
+        let mut s = three_ecu_scenario(seed);
+        s.connect();
+        s.tick_n(50);
+        assert!(s.is_activated(), "seed {seed}: not activated");
+
+        let conn_id = s.conn_id();
+        s.request(conn_id, FUNCTIONAL_TARGET, &[0x10, 0x03])
+            .expect("functional request accepted");
+        s.tick_n(MAX_TICKS);
+
+        for ecu in [ECU_ONE, ECU_TWO, ECU_THREE] {
+            assert_eq!(
+                session_of(&s, ecu),
+                0x03,
+                "seed {seed}: ECU {ecu:#06X} did not receive the functional request"
+            );
+        }
+    }
+}
+
+/// P7: the control. A physically addressed request reaches only its target.
+///
+/// Without this, the test above would also pass if the gateway broadcast everything.
+#[test]
+fn p7_physical_request_reaches_only_its_target() {
+    let mut s = three_ecu_scenario(0);
+    s.connect();
+    s.tick_n(50);
+    assert!(s.is_activated(), "not activated");
+
+    let conn_id = s.conn_id();
+    s.request(conn_id, ECU_TWO, &[0x10, 0x03])
+        .expect("physical request accepted");
+    s.tick_n(MAX_TICKS);
+
+    assert_eq!(session_of(&s, ECU_TWO), 0x03, "the addressed ECU responded");
+    assert_eq!(
+        session_of(&s, ECU_ONE),
+        0x01,
+        "ECU one was not addressed and must stay in the default session"
+    );
+    assert_eq!(
+        session_of(&s, ECU_THREE),
+        0x01,
+        "ECU three was not addressed and must stay in the default session"
+    );
+}
+
+/// P7: an unservable functional request is met with silence, not a negative response.
+///
+/// ISO 14229-1 requires the five "not implemented" NRCs to be withheld on a functionally
+/// addressed request. Reading an unsupported DID yields requestOutOfRange, which is one of
+/// them, so no ECU may answer - and the tester must not receive a negative response.
+#[test]
+fn p7_unservable_functional_request_is_silent() {
+    let mut s = three_ecu_scenario(0);
+    s.connect();
+    s.tick_n(50);
+    assert!(s.is_activated(), "not activated");
+
+    let conn_id = s.conn_id();
+    // 0xF199 is not configured on any ECU.
+    s.request(conn_id, FUNCTIONAL_TARGET, &[0x22, 0xF1, 0x99])
+        .expect("functional request accepted");
+    s.tick_n(MAX_TICKS);
+
+    let events = s.drain_events();
+    let negative = events.iter().any(|(_, _, e)| {
+        matches!(
+            e,
+            DoipTesterEvent::Uds(ClientEvent::NegativeResponse { .. })
+        )
+    });
+
+    assert!(
+        !negative,
+        "a negative response to an unservable functional request must be suppressed"
+    );
+}
+
+// endregion: P7
 
 // region: P3 - RDBI over DoIP after session change
 

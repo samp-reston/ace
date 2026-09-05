@@ -23,7 +23,7 @@ use ace_core::storage::CapacityError;
 use ace_core::{FrameRead, FrameWrite, Vec};
 use ace_core::{
     clock::{Duration, Instant},
-    io::{LinkEvent, NodeAddress},
+    io::{InboundFrame, LinkEvent, NodeAddress},
 };
 use ace_doip::{
     error::DoipError,
@@ -647,11 +647,16 @@ impl<
 
         let conn_id = self.connection_id();
         let target_id = TargetId(u16::from(source));
+        let tester_address = self.tester_address;
 
         if let Some(target) = self.find_target_mut(source) {
-            let _ = target
-                .client
-                .handle(&NodeAddress(source as u32), uds_data, now);
+            // Addressed to us: a response arrives at the tester's own address.
+            let frame = InboundFrame::new(
+                NodeAddress(source as u32),
+                NodeAddress(u32::from(tester_address)),
+                uds_data,
+            );
+            let _ = target.client.handle(&frame, now);
 
             let client_events: Vec<ClientEvent<MAX_DATA>, MAX_TARGET_EVENTS> =
                 Vec::from_iter_checked(target.client.drain_events())

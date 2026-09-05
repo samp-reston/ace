@@ -29,7 +29,7 @@ use ace_doip::{
     },
     session::{ActivationAuthProvider, ActivationStateMachine, ConnectionAction, ConnectionState},
 };
-use ace_proto::DoipFrame;
+use ace_proto::{DoipFrame, LogicalAddress};
 
 use crate::{
     config::GatewayConfig,
@@ -117,15 +117,24 @@ struct EcuIsoTpNode<const ISOTP_MAX_FRAME: usize> {
 
     /// Reassembles ISO-TP CAN response frames from the ECU -> UDS bytes.
     resp_reassembler: Reassembler<ISOTP_MAX_FRAME>,
+
+    /// Kept so the single-frame payload limit can be derived for broadcasts.
+    addressing_mode: IsoTpAddressingMode,
 }
 
 impl<const ISOTP_MAX_FRAME: usize> EcuIsoTpNode<ISOTP_MAX_FRAME> {
+    /// Largest payload this node can carry in one unsegmented frame.
+    fn max_single_frame_payload(&self) -> usize {
+        self.addressing_mode.max_sf_payload_classic()
+    }
+
     fn new(request_can_id: u32, response_can_id: u32, mode: IsoTpAddressingMode) -> Self {
         Self {
             request_can_id,
             response_can_id,
             req_segmenter: Segmenter::new(SegmenterConfig::classic(mode.clone())),
-            resp_reassembler: Reassembler::new(ReassemblerConfig::new(mode)),
+            resp_reassembler: Reassembler::new(ReassemblerConfig::new(mode.clone())),
+            addressing_mode: mode,
         }
     }
 }
@@ -188,7 +197,13 @@ pub struct DoipGateway<
     can_outbox: Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX>,
 
     /// Pending route table - matches CAN responses to tester connections.
-    routes: PendingRouteTable<MAX_TESTERS>,
+    ///
+    /// Sized by node count rather than tester count. One functionally addressed request
+    /// needs a route per responding ECU, so a table sized by testers could not hold a
+    /// single fan-out. Concurrent fan-outs from several testers can still exhaust it,
+    /// which is answered with a NACK rather than silently dropping a route - stable Rust
+    /// cannot express `MAX_TESTERS * ISOTP_MAX_NODES` in a type position.
+    routes: PendingRouteTable<ISOTP_MAX_NODES>,
 
     /// Active tester connection slots.
     connections: Vec<
@@ -572,6 +587,219 @@ where
         Ok(())
     }
 
+    /// Routes a diagnostic request, returning `None` when it was forwarded or the code
+    /// to refuse it with.
+    ///
+    /// A refusal is a protocol answer, not an error: the tester is told why, and the
+    /// gateway carries on serving other connections.
+    fn forward_request(
+        &mut self,
+        slot_idx: usize,
+        source_address: u16,
+        target_address: u16,
+        uds_data: &[u8],
+    ) -> Result<Option<DiagnosticNackCode>, GatewayError> {
+        if LogicalAddress::new(target_address).is_functional() {
+            self.fan_out(slot_idx, source_address, target_address, uds_data)
+        } else {
+            self.forward_to_one(slot_idx, source_address, target_address, uds_data)
+        }
+    }
+
+    /// Forwards a physically addressed request to the single ECU that owns the address.
+    fn forward_to_one(
+        &mut self,
+        slot_idx: usize,
+        source_address: u16,
+        target_address: u16,
+        uds_data: &[u8],
+    ) -> Result<Option<DiagnosticNackCode>, GatewayError> {
+        let node = match self.config.find_node(target_address) {
+            Some(n) => n.clone(),
+            None => return Ok(Some(DiagnosticNackCode::UnknownTargetAddress)),
+        };
+
+        let tester_address = self.connections[slot_idx].tester_address.unwrap_or(0);
+
+        // Checked before committing, and reported rather than dropped. This push
+        // previously discarded its result, so a full table silently produced a request
+        // whose response could never be matched back to the tester that asked for it.
+        if self.routes.remaining() == 0 {
+            return Ok(Some(DiagnosticNackCode::OutOfMemory));
+        }
+
+        if !self.routes.insert(PendingRoute {
+            tester_address,
+            doip_source: source_address,
+            doip_target: target_address,
+            response_can_id: node.response_can_id,
+        }) {
+            return Ok(Some(DiagnosticNackCode::OutOfMemory));
+        }
+
+        self.segment_onto_can(node.request_can_id, node.request_can_id, uds_data)?;
+
+        Ok(None)
+    }
+
+    /// Forwards a functionally addressed request to every ECU behind this gateway.
+    ///
+    /// All-or-nothing. Every capacity question is settled before anything is committed,
+    /// because a partial fan-out followed by an acknowledgement would tell the tester
+    /// that all ECUs received a request most of them never saw - which is worse than a
+    /// refusal, since the tester cannot tell the difference between an ECU that declined
+    /// to answer and one that was never asked.
+    ///
+    /// Overflow is answered with `OutOfMemory` rather than raised as an error: DoIP
+    /// already defines the response for a gateway that cannot accept a message, and
+    /// where the protocol defines an answer the protocol wins.
+    fn fan_out(
+        &mut self,
+        slot_idx: usize,
+        source_address: u16,
+        target_address: u16,
+        uds_data: &[u8],
+    ) -> Result<Option<DiagnosticNackCode>, GatewayError> {
+        let node_count = self.config.nodes.len();
+
+        if node_count == 0 {
+            return Ok(Some(DiagnosticNackCode::UnknownTargetAddress));
+        }
+
+        // One route per ECU: each answers on its own response identifier, so each needs
+        // a slot for its reply to be matched back to this tester.
+        //
+        // The sizing precondition is that the route table can hold a whole fan-out.
+        // Stable Rust cannot express a relation between two const generic parameters, so
+        // it is asserted in debug builds and answered with a NACK at runtime.
+        debug_assert!(
+            self.routes.capacity() >= node_count,
+            "route table is too small to hold a fan-out to every ECU"
+        );
+
+        if self.routes.remaining() < node_count {
+            return Ok(Some(DiagnosticNackCode::OutOfMemory));
+        }
+
+        // A functional request is one transmission on a shared identifier, so it has to
+        // fit a single frame. ISO 15765-2 segmentation cannot be used: a first frame
+        // would draw a flow-control response from every receiver at once, and the sender
+        // has no way to tell whose to obey.
+        let node = self.config.nodes[0].clone();
+
+        let single_frame_limit = match self
+            .isotp_nodes
+            .iter()
+            .find(|n| n.request_can_id == node.request_can_id)
+        {
+            Some(n) => n.max_single_frame_payload(),
+            None => return Ok(Some(DiagnosticNackCode::TargetUnreachable)),
+        };
+
+        if uds_data.len() > single_frame_limit {
+            return Ok(Some(DiagnosticNackCode::TransportProtocolError));
+        }
+
+        if self.can_outbox.is_full() {
+            return Ok(Some(DiagnosticNackCode::OutOfMemory));
+        }
+
+        let tester_address = self.connections[slot_idx].tester_address.unwrap_or(0);
+
+        // Committed only now that every check has passed.
+        for entry in self.config.nodes.iter() {
+            // Each route carries the ECU's own logical address, not the functional one:
+            // a stored route's target becomes the source of the response sent back, so
+            // reusing the group address here would make every reply claim to come from
+            // the group rather than from the ECU that produced it.
+            let inserted = self.routes.insert(PendingRoute {
+                tester_address,
+                doip_source: source_address,
+                doip_target: entry.logical_address,
+                response_can_id: entry.response_can_id,
+            });
+
+            debug_assert!(
+                inserted,
+                "capacity was checked before committing the fan-out"
+            );
+        }
+
+        // One frame on the shared identifier, not one per ECU - that is what makes this
+        // a broadcast rather than a loop of unicasts.
+        debug_assert!(
+            self.config
+                .nodes
+                .iter()
+                .all(|n| n.functional_can_id == node.functional_can_id),
+            "a broadcast presumes one shared functional identifier on the segment"
+        );
+
+        self.segment_onto_can(node.request_can_id, node.functional_can_id, uds_data)?;
+
+        let _ = target_address;
+
+        Ok(None)
+    }
+
+    /// Segments UDS bytes with `segmenter_can_id`'s ISO-TP state and sends them on
+    /// `send_can_id`.
+    ///
+    /// The two differ for a broadcast: the segmenter belongs to a specific ECU, but the
+    /// frames go out on the shared functional identifier.
+    fn segment_onto_can(
+        &mut self,
+        segmenter_can_id: u32,
+        send_can_id: u32,
+        uds_data: &[u8],
+    ) -> Result<(), GatewayError> {
+        let isotp = match self
+            .isotp_nodes
+            .iter_mut()
+            .find(|n| n.request_can_id == segmenter_can_id)
+        {
+            Some(n) => n,
+            None => return Ok(()),
+        };
+
+        isotp
+            .req_segmenter
+            .start(uds_data)
+            .map_err(GatewayError::IsoTpError)?;
+
+        let mut out_buf = [0u8; CAN_MAX_FRAME];
+        let mut staged: Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX> = Vec::new();
+
+        loop {
+            match isotp
+                .req_segmenter
+                .next_frame(&mut out_buf)
+                .map_err(GatewayError::IsoTpError)?
+            {
+                SegmentResult::Complete => break,
+                SegmentResult::WaitForFlowControl => break,
+                SegmentResult::Frame { len } => {
+                    let mut frame: Vec<u8, CAN_MAX_FRAME> = Vec::new();
+                    frame
+                        .extend_from_slice(&out_buf[..len])
+                        .map_err(|_| GatewayError::FrameTooLong)?;
+
+                    staged
+                        .push((NodeAddress(send_can_id), frame))
+                        .map_err(|_| GatewayError::CanOutboxFull)?;
+                }
+            }
+        }
+
+        for frame in staged {
+            self.can_outbox
+                .push(frame)
+                .map_err(|_| GatewayError::CanOutboxFull)?;
+        }
+
+        Ok(())
+    }
+
     fn handle_connection_action(
         &mut self,
         slot_idx: usize,
@@ -581,19 +809,6 @@ where
         match action {
             ConnectionAction::SendActivationResponse(resp) => {
                 self.encode_and_send_tcp(tester, PayloadType::RoutingActivationResponse, &resp)?;
-            }
-
-            ConnectionAction::SendDiagnosticAck {
-                source_address,
-                target_address,
-            } => {
-                let ack = DiagnosticMessageAck {
-                    source_address: source_address.to_be_bytes(),
-                    target_address: target_address.to_be_bytes(),
-                    ack_code: DiagnosticAckCode::Acknowledged,
-                    data: &[],
-                };
-                self.encode_and_send_tcp(tester, PayloadType::DiagnosticMessageAck, &ack)?;
             }
 
             ConnectionAction::SendDiagnosticNack {
@@ -614,66 +829,36 @@ where
                 target_address,
                 uds_data,
             } => {
-                let node = match self.config.find_node(target_address) {
-                    Some(n) => n.clone(),
-                    None => {
-                        let nack = DiagnosticMessageNack {
-                            source_address: source_address.to_be_bytes(),
-                            target_address: target_address.to_be_bytes(),
-                            nack_code: DiagnosticNackCode::UnknownTargetAddress,
-                        };
+                // Decide first, then answer. A DoIP acknowledgement states the request
+                // was accepted for processing, which is only knowable once routing has
+                // been established - so the ack is this gateway's answer to the forward
+                // rather than something promised ahead of it.
+                let refusal =
+                    self.forward_request(slot_idx, source_address, target_address, &uds_data)?;
 
-                        return self.encode_and_send_tcp(
+                let gateway_address = self.config.logical_address;
+
+                match refusal {
+                    None => {
+                        let ack = DiagnosticMessageAck {
+                            source_address: gateway_address.to_be_bytes(),
+                            target_address: source_address.to_be_bytes(),
+                            ack_code: DiagnosticAckCode::Acknowledged,
+                            data: &[],
+                        };
+                        self.encode_and_send_tcp(tester, PayloadType::DiagnosticMessageAck, &ack)?;
+                    }
+                    Some(nack_code) => {
+                        let nack = DiagnosticMessageNack {
+                            source_address: gateway_address.to_be_bytes(),
+                            target_address: source_address.to_be_bytes(),
+                            nack_code,
+                        };
+                        self.encode_and_send_tcp(
                             tester,
                             PayloadType::DiagnosticMessageNack,
                             &nack,
-                        );
-                    }
-                };
-
-                let tester_address = self.connections[slot_idx].tester_address.unwrap_or(0);
-                let _ = self.routes.insert(PendingRoute {
-                    tester_address,
-                    doip_source: source_address,
-                    doip_target: target_address,
-                    response_can_id: node.response_can_id,
-                });
-
-                let isotp = match self
-                    .isotp_nodes
-                    .iter_mut()
-                    .find(|n| n.request_can_id == node.request_can_id)
-                {
-                    Some(n) => n,
-                    None => return Ok(()),
-                };
-
-                isotp
-                    .req_segmenter
-                    .start(&uds_data)
-                    .map_err(GatewayError::IsoTpError)?;
-
-                let mut out_buf = [0u8; CAN_MAX_FRAME];
-                let request_can_id = node.request_can_id;
-
-                loop {
-                    match isotp
-                        .req_segmenter
-                        .next_frame(&mut out_buf)
-                        .map_err(GatewayError::IsoTpError)?
-                    {
-                        SegmentResult::Complete => break,
-                        SegmentResult::WaitForFlowControl => break,
-                        SegmentResult::Frame { len } => {
-                            let mut frame: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                            frame
-                                .extend_from_slice(&out_buf[..len])
-                                .map_err(|_| GatewayError::FrameTooLong)?;
-
-                            self.can_outbox
-                                .push((NodeAddress(request_can_id), frame))
-                                .map_err(|_| GatewayError::CanOutboxFull)?;
-                        }
+                        )?;
                     }
                 }
             }

@@ -38,6 +38,55 @@ pub struct RawMessage<const MAX_DATA: usize> {
 
 // endregion: RawMessage
 
+// region: InboundFrame
+
+/// A frame delivered to a node, with the addressing information it needs to decide
+/// whether the frame is for it.
+///
+/// `dst` is the point of this type. Before it existed, delivery passed only `src` and
+/// the payload, so a node could not tell a physically addressed request from a
+/// functionally addressed one - and could not tell whether the frame was addressed to
+/// it at all. Ownership filtering therefore had to happen above the node, in whatever
+/// was driving it, which meant a real ECU built on this suite inherited none of it.
+///
+/// Borrows its payload: delivery is a hot path and the data already exists in the
+/// caller's buffer, so there is no reason to copy it into a bounded `Vec` first.
+///
+/// The current time is deliberately *not* part of this type. `now` is a reading of the
+/// caller's clock at the moment the node is run, not a property of the frame, and
+/// keeping it a separate argument matches [`crate::node::DiagnosticNode::tick`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InboundFrame<'a> {
+    /// Who sent it.
+    pub src: NodeAddress,
+
+    /// Which address it was sent to. The receiving node compares this against the
+    /// addresses it declares in order to classify the request.
+    pub dst: NodeAddress,
+
+    /// The payload, borrowed from the caller.
+    pub data: &'a [u8],
+}
+
+impl<'a> InboundFrame<'a> {
+    pub const fn new(src: NodeAddress, dst: NodeAddress, data: &'a [u8]) -> Self {
+        Self { src, dst, data }
+    }
+}
+
+impl<const MAX_DATA: usize> RawMessage<MAX_DATA> {
+    /// Borrows this message as an [`InboundFrame`] for delivery to a node.
+    pub fn as_inbound(&self) -> InboundFrame<'_> {
+        InboundFrame {
+            src: self.src.clone(),
+            dst: self.dst.clone(),
+            data: self.data.as_slice(),
+        }
+    }
+}
+
+// endregion: InboundFrame
+
 // region: LinkEvent
 
 /// A lifecycle transition on a connection-oriented link.

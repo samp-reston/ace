@@ -26,11 +26,10 @@ impl<
 
     fn handle(
         &mut self,
-        src: &ace_core::io::NodeAddress,
-        data: &[u8],
+        frame: &ace_core::io::InboundFrame<'_>,
         now: ace_core::clock::Instant,
     ) -> Result<(), Self::Error> {
-        UdsClient::handle(self, src, data, now)
+        UdsClient::handle(self, frame, now)
     }
 
     fn tick(&mut self, now: ace_core::clock::Instant) -> Result<(), Self::Error> {

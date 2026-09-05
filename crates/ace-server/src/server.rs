@@ -1,8 +1,9 @@
 // region: Imports
 
+use ace_core::AddressMode;
 use ace_core::Vec;
 use ace_core::clock::{Duration, Instant};
-use ace_core::io::NodeAddress;
+use ace_core::io::{InboundFrame, NodeAddress};
 use ace_core::storage::CapacityError;
 use ace_proto::uds::UdsFrame;
 use ace_uds::ext::UdsFrameExt;
@@ -272,6 +273,14 @@ pub struct UdsServer<
     session: SessionState,
     security: SecurityState<MAX_SEED, MAX_SECURITY_LEVELS>,
     periodic: PeriodicState<MAX_PERIODIC>,
+
+    /// How the request currently being handled was addressed.
+    ///
+    /// Per-request and transient: set at the top of [`Self::handle`] and read by
+    /// [`Self::nrc_raw`] to decide whether ISO 14229-1's functional suppression
+    /// applies. Defaults to `Physical` so any path that emits an NRC outside a
+    /// `handle` call answers rather than falling silent.
+    inbound: AddressMode,
     outbox: Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
 }
 
@@ -327,6 +336,7 @@ where
             session: SessionState::new(),
             security: SecurityState::new(),
             periodic: PeriodicState::new(),
+            inbound: AddressMode::Physical,
             outbox: Vec::new(),
         }
     }
@@ -336,6 +346,20 @@ where
     pub fn address(&self) -> &NodeAddress {
         &self.address
     }
+    /// The UDS logical address this server answers on.
+    pub fn physical_address(&self) -> u16 {
+        self.config.physical_address
+    }
+
+    /// The UDS functional (broadcast) address this server listens on.
+    ///
+    /// A transport uses this to translate its own broadcast identifier - CAN ID 0x7DF
+    /// conventionally - into the UDS address space before delivery, so this server
+    /// never has to know what a CAN ID is.
+    pub fn functional_address(&self) -> u16 {
+        self.config.functional_address
+    }
+
     pub fn session_type(&self) -> u8 {
         self.session.session_type
     }
@@ -351,10 +375,27 @@ where
     /// handlers that need structured field access.
     pub fn handle(
         &mut self,
-        src: &NodeAddress,
-        data: &[u8],
+        frame: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), ServerError<H::Error>> {
+        let src = &frame.src;
+        let data = frame.data;
+
+        // Ownership filter. `dst` is a UDS logical address: the transport has already
+        // mapped its own addressing onto this space, so a CAN node compares logical
+        // addresses here and never sees a CAN ID.
+        //
+        // A frame addressed to neither of this server's addresses is not ours. Staying
+        // silent is the whole point - before this existed the filtering lived in
+        // whatever drove the node, so a real ECU inherited none of it.
+        self.inbound = if frame.dst.0 == u32::from(self.config.physical_address) {
+            AddressMode::Physical
+        } else if frame.dst.0 == u32::from(self.config.functional_address) {
+            AddressMode::Functional
+        } else {
+            return Ok(());
+        };
+
         self.session.last_rx = now;
 
         let frame = UdsFrame::from_slice(data);
@@ -492,10 +533,26 @@ where
         }
     }
 
+    /// Rejects a service the session does not allow.
+    ///
+    /// Distinguishes two conditions the standard gives different codes: a SID this
+    /// server does not implement at all is `serviceNotSupported`, while one it
+    /// implements but which this session does not permit is
+    /// `serviceNotSupportedInActiveSession`. Collapsing both into the latter, as this
+    /// did previously, tells a tester the service might work in another session when it
+    /// does not exist here at all.
+    ///
+    /// Both codes are suppressed on a functionally addressed request, so this changes
+    /// only what a physically addressed tester is told - accurately.
     fn guard_service(&self, sid: u8) -> Result<(), u8> {
+        if self.config.find_service(sid).is_none() {
+            return Err(H::Error::service_not_supported().into());
+        }
+
         if !self.config.service_allowed(sid, self.session.session_type) {
             return Err(H::Error::service_not_supported_in_active_session().into());
         }
+
         Ok(())
     }
 
@@ -578,7 +635,37 @@ where
         self.nrc_raw(dst, request_sid, nrc_byte, _now)
     }
 
+    /// NRCs ISO 14229-1 requires a server to withhold on a functionally addressed
+    /// request: serviceNotSupported, subFunctionNotSupported, requestOutOfRange,
+    /// subFunctionNotSupportedInActiveSession, serviceNotSupportedInActiveSession.
+    ///
+    /// Every one means "this server does not implement that". On a broadcast most
+    /// servers legitimately do not, so answering would flood the client. See ADR-005.
+    const FUNCTIONALLY_SUPPRESSED: [u8; 5] = [0x11, 0x12, 0x31, 0x7E, 0x7F];
+
     fn nrc_raw(
+        &mut self,
+        dst: &NodeAddress,
+        request_sid: u8,
+        nrc_byte: u8,
+        now: Instant,
+    ) -> Result<(), ServerError<H::Error>> {
+        if self.inbound == AddressMode::Functional
+            && Self::FUNCTIONALLY_SUPPRESSED.contains(&nrc_byte)
+        {
+            return Ok(());
+        }
+
+        self.nrc_raw_unconditional(dst, request_sid, nrc_byte, now)
+    }
+
+    /// Sends a negative response regardless of how the request was addressed.
+    ///
+    /// For the case ISO 14229-1 distinguishes from "not implemented": the request *is*
+    /// ours and processing it failed. Such a response is transmitted even on a
+    /// functional request, and even with the suppress-positive bit set, because the
+    /// condition is specific to this server and the client needs it.
+    fn nrc_raw_unconditional(
         &mut self,
         dst: &NodeAddress,
         request_sid: u8,
@@ -975,12 +1062,24 @@ where
                     // Refuse rather than confirm a subscription that was not stored:
                     // a positive response here would promise periodic data the server
                     // has no record of and will never send.
+                    //
+                    // Sent unconditionally. This reuses requestOutOfRange, which is
+                    // normally suppressed on a functional request, but the meaning here
+                    // is the opposite of "not implemented": the DID *is* supported and
+                    // the server ran out of room. ISO 14229-1 requires that outcome to
+                    // be reported even on a broadcast, so it must bypass the
+                    // suppression - see ADR-005.
                     if self
                         .periodic
                         .register(did, effective, src.clone(), now)
                         .is_err()
                     {
-                        return self.nrc(src, 0x2A, H::Error::request_out_of_range(), now);
+                        return self.nrc_raw_unconditional(
+                            src,
+                            0x2A,
+                            H::Error::request_out_of_range().into(),
+                            now,
+                        );
                     }
                 }
 

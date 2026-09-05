@@ -16,7 +16,7 @@ pub mod clock;
 pub use clock::{Clock, Duration, Instant};
 
 pub mod io;
-pub use io::{FrameTransport, LinkEvent, MessageTransport, NodeAddress, RawMessage};
+pub use io::{FrameTransport, InboundFrame, LinkEvent, MessageTransport, NodeAddress, RawMessage};
 
 pub mod node;
 pub use node::DiagnosticNode;

@@ -9,7 +9,7 @@
 
 use crate::{
     clock::{Duration, Instant},
-    io::NodeAddress,
+    io::{InboundFrame, NodeAddress},
     node::SimNodeErased,
     tcp_bus::{LinkEvent, TcpSimBus},
 };
@@ -86,11 +86,19 @@ impl<
         let mut count = 0;
 
         for envelope in &delivered {
+            // Counts frames put on the segment, not node deliveries: each frame
+            // below is offered to every node, so counting per node would inflate
+            // this by the node count and contradict what it documents.
+            count += 1;
+
             for node in nodes.iter_mut() {
-                if *node.address() == envelope.dst {
-                    node.handle(&envelope.src, &envelope.data, now);
-                    count += 1;
-                }
+                // Offered to every node on the segment, as a real CAN or Ethernet
+                // link does. Filtering by destination here made the harness do the
+                // nodes' job, so a node that cannot filter its own traffic looked
+                // correct in simulation and would answer everything in production.
+                let frame =
+                    InboundFrame::new(envelope.src.clone(), envelope.dst.clone(), &envelope.data);
+                node.handle(&frame, now);
             }
         }
 

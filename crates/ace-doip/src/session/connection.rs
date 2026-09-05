@@ -78,12 +78,6 @@ pub enum ConnectionAction<const UDS_MAX_FRAME: usize> {
         uds_data: heapless::Vec<u8, UDS_MAX_FRAME>,
     },
 
-    /// Send a `DiagnosticMessageAck` back to the tester.
-    SendDiagnosticAck {
-        source_address: u16,
-        target_address: u16,
-    },
-
     /// Send a `DiagnosticMessageNack` back to the tester.
     SendDiagnosticNack {
         source_address: u16,
@@ -317,11 +311,14 @@ impl<
             });
         }
 
-        self.emit(ConnectionAction::SendDiagnosticAck {
-            source_address: source,
-            target_address: target,
-        })?;
-
+        // Deliberately does NOT acknowledge here.
+        //
+        // A DoIP acknowledgement states the message was accepted for processing, which
+        // is only known once whoever handles `ForwardToEcu` has established it can route
+        // the request. Emitting the ack first meant a tester was told its request had
+        // been accepted and could then be refused for the same request - and on a
+        // functionally addressed request it claimed every ECU had received something
+        // most of them had not. The ack is now the caller's answer to the forward.
         self.emit(ConnectionAction::ForwardToEcu {
             source_address: source,
             target_address: target,

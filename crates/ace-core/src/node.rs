@@ -14,7 +14,7 @@
 
 use crate::Vec;
 use crate::clock::Instant;
-use crate::io::NodeAddress;
+use crate::io::{InboundFrame, NodeAddress};
 
 // endregion: Imports
 
@@ -38,8 +38,14 @@ pub trait DiagnosticNode<const MAX_FRAME: usize, const MAX_OUTBOX: usize> {
     /// Returns this node's address.
     fn address(&self) -> &NodeAddress;
 
-    /// Delivers an inbound message to the node.
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) -> Result<(), Self::Error>;
+    /// Delivers an inbound frame to the node.
+    ///
+    /// The frame carries its destination, so the node decides for itself whether the
+    /// frame is addressed to it and whether the addressing was physical or functional.
+    /// That decision belongs here rather than in the caller: on CAN there is nothing
+    /// above the wire that could make it, so a node that cannot filter its own traffic
+    /// is not usable on the transport this suite exists to support.
+    fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant) -> Result<(), Self::Error>;
 
     /// Advances the node's internal state to the given time.
     ///

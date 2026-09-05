@@ -12,7 +12,7 @@
 
 use ace_core::Vec;
 use ace_core::clock::{Duration, Instant};
-use ace_core::io::NodeAddress;
+use ace_core::io::{InboundFrame, NodeAddress};
 use ace_server::BuiltinNrc;
 use ace_server::config::{
     DidConfig, SecurityLevelConfig, ServerConfig, ServiceConfig, SessionConfig,
@@ -119,6 +119,14 @@ fn server(response_len: usize) -> TestServer {
     )
 }
 
+/// A physically addressed request from the tester to this server.
+///
+/// These tests are about capacity, not addressing, so every request is physical - the
+/// functional path and its suppression rules are ADR-005's subject.
+fn physical(data: &[u8]) -> InboundFrame<'_> {
+    InboundFrame::new(NodeAddress(0x0E80), NodeAddress(0x1000), data)
+}
+
 fn drain(s: &mut TestServer) -> Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX> {
     let mut out = Vec::new();
     s.drain_outbox(&mut out).expect("outbox fits");
@@ -133,11 +141,10 @@ fn drain(s: &mut TestServer) -> Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBO
 /// positive response with its data field silently missing.
 #[test]
 fn oversized_handler_response_yields_nrc_response_too_long() {
-    let tester = NodeAddress(0x0E80);
     // 2 DID echo bytes + 8 data bytes cannot fit MAX_FRAME = 8.
     let mut s = server(MAX_FRAME);
 
-    s.handle(&tester, &[0x22, 0xF1, 0x90], Instant::ZERO)
+    s.handle(&physical(&[0x22, 0xF1, 0x90]), Instant::ZERO)
         .expect("request is handled, the response is negative");
 
     let out = drain(&mut s);
@@ -156,11 +163,10 @@ fn oversized_handler_response_yields_nrc_response_too_long() {
 /// above is proving a boundary and not merely a broken server.
 #[test]
 fn response_within_budget_still_yields_positive_response() {
-    let tester = NodeAddress(0x0E80);
     // 1 response SID + 2 DID bytes + 4 data bytes = 7 <= MAX_FRAME.
     let mut s = server(4);
 
-    s.handle(&tester, &[0x22, 0xF1, 0x90], Instant::ZERO)
+    s.handle(&physical(&[0x22, 0xF1, 0x90]), Instant::ZERO)
         .expect("request handled");
 
     let out = drain(&mut s);
@@ -183,12 +189,11 @@ fn response_within_budget_still_yields_positive_response() {
 /// that still holds earlier frames, which is what this exercises.
 #[test]
 fn drain_into_partly_full_buffer_moves_nothing_and_reports_error() {
-    let tester = NodeAddress(0x0E80);
     let mut s = server(2);
 
     // Two queued responses.
     for _ in 0..2 {
-        s.handle(&tester, &[0x22, 0xF1, 0x90], Instant::ZERO)
+        s.handle(&physical(&[0x22, 0xF1, 0x90]), Instant::ZERO)
             .expect("request handled");
     }
 
@@ -229,7 +234,6 @@ fn drain_into_partly_full_buffer_moves_nothing_and_reports_error() {
 /// the 12th level specifically: it is the one that used to fail open.
 #[test]
 fn attempt_limit_is_enforced_on_levels_beyond_the_old_eight_slot_bound() {
-    let tester = NodeAddress(0x0E80);
     let mut s = server(1);
 
     // Occupy the first eight levels, exactly filling the table as it used to be
@@ -237,10 +241,10 @@ fn attempt_limit_is_enforced_on_levels_beyond_the_old_eight_slot_bound() {
     // single level always fitted.
     for i in 0..8u8 {
         let level = i * 2 + 1;
-        s.handle(&tester, &[0x27, level], Instant::ZERO)
+        s.handle(&physical(&[0x27, level]), Instant::ZERO)
             .expect("seed request handled");
         let _ = drain(&mut s);
-        s.handle(&tester, &[0x27, level + 1, 0x00], Instant::ZERO)
+        s.handle(&physical(&[0x27, level + 1, 0x00]), Instant::ZERO)
             .expect("key request handled");
         let _ = drain(&mut s);
     }
@@ -252,11 +256,11 @@ fn attempt_limit_is_enforced_on_levels_beyond_the_old_eight_slot_bound() {
     // must escalate to exceededNumberOfAttempts. Under the old bound this level was
     // never counted, so it would report invalidKey indefinitely.
     for (attempt, want) in [0x35u8, 0x35, 0x36].iter().enumerate() {
-        s.handle(&tester, &[0x27, level], Instant::ZERO)
+        s.handle(&physical(&[0x27, level]), Instant::ZERO)
             .expect("seed request handled");
         let _ = drain(&mut s);
 
-        s.handle(&tester, &[0x27, level + 1, 0x00], Instant::ZERO)
+        s.handle(&physical(&[0x27, level + 1, 0x00]), Instant::ZERO)
             .expect("key request handled");
         let out = drain(&mut s);
 
@@ -278,7 +282,6 @@ fn attempt_limit_is_enforced_on_levels_beyond_the_old_eight_slot_bound() {
 /// top of the range is still counted.
 #[test]
 fn every_configured_level_is_tracked_independently() {
-    let tester = NodeAddress(0x0E80);
     let mut s = server(1);
 
     // One failed attempt on each of the 12 levels. If the tables were still bounded
@@ -287,11 +290,11 @@ fn every_configured_level_is_tracked_independently() {
     for i in 0..12u8 {
         let level = i * 2 + 1;
 
-        s.handle(&tester, &[0x27, level], Instant::ZERO)
+        s.handle(&physical(&[0x27, level]), Instant::ZERO)
             .expect("seed request handled");
         let _ = drain(&mut s);
 
-        s.handle(&tester, &[0x27, level + 1, 0x00], Instant::ZERO)
+        s.handle(&physical(&[0x27, level + 1, 0x00]), Instant::ZERO)
             .expect("key request handled");
         let out = drain(&mut s);
         assert_eq!(out[0].1.as_slice(), &[0x7F, 0x27, 0x35]);
@@ -301,10 +304,10 @@ fn every_configured_level_is_tracked_independently() {
     // was retained rather than dropped.
     for want in [0x35u8, 0x36] {
         let level = 11 * 2 + 1;
-        s.handle(&tester, &[0x27, level], Instant::ZERO)
+        s.handle(&physical(&[0x27, level]), Instant::ZERO)
             .expect("seed request handled");
         let _ = drain(&mut s);
-        s.handle(&tester, &[0x27, level + 1, 0x00], Instant::ZERO)
+        s.handle(&physical(&[0x27, level + 1, 0x00]), Instant::ZERO)
             .expect("key request handled");
         let out = drain(&mut s);
         assert_eq!(

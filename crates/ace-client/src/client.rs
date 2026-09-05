@@ -2,7 +2,7 @@
 
 use ace_core::Vec;
 use ace_core::clock::{Duration, Instant};
-use ace_core::io::NodeAddress;
+use ace_core::io::{InboundFrame, NodeAddress};
 use ace_core::storage::CapacityError;
 use ace_proto::{UdsFrame, common::RawFrame};
 use ace_uds::ext::UdsFrameExt;
@@ -99,12 +99,8 @@ impl<
     /// Periodic classification must precede positive response classification because a periodic
     /// DID low byte could theoretically have bit 6 set. Explicit subscription registry takes
     /// priority.
-    pub fn handle(
-        &mut self,
-        _src: &NodeAddress,
-        data: &[u8],
-        now: Instant,
-    ) -> Result<(), ClientError> {
+    pub fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant) -> Result<(), ClientError> {
+        let data = frame.data;
         // Nothing to do for empty frames
         let first = match data.first().copied() {
             Some(b) => b,

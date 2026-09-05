@@ -21,7 +21,10 @@ use ace_can::{
 };
 use ace_core::Vec;
 use ace_core::storage::CapacityError;
-use ace_core::{clock::Instant, io::NodeAddress};
+use ace_core::{
+    clock::Instant,
+    io::{InboundFrame, NodeAddress},
+};
 use ace_server::{
     NrcError,
     handler::ServerHandler,
@@ -80,6 +83,9 @@ pub struct EcuNode<
 
     /// CAN ID the gateway listens on for responses.
     pub response_can_id: u32,
+
+    /// CAN ID carrying functionally addressed (broadcast) requests.
+    pub functional_can_id: u32,
 
     /// Reassembles incoming ISO-TP CAN request frames → UDS bytes.
     req_reassembler: Reassembler<CAN_MAX_FRAME>,
@@ -152,10 +158,18 @@ where
     H: ServerHandler,
     S: SecurityProvider,
 {
+    /// Builds an ECU node.
+    ///
+    /// `functional_can_id` is the CAN identifier carrying functionally addressed
+    /// requests - 0x7DF by convention on classic CAN. Frames arriving there are
+    /// translated to the server's functional UDS address rather than its physical one,
+    /// which is what lets the server apply ISO 14229-1's suppression rules without
+    /// knowing anything about CAN.
     pub fn new(
         logical_address: u16,
         request_can_id: u32,
         response_can_id: u32,
+        functional_can_id: u32,
         mode: IsoTpAddressingMode,
         server: UdsServer<
             UDS_MAX_FRAME,
@@ -179,6 +193,7 @@ where
             logical_address,
             request_can_id,
             response_can_id,
+            functional_can_id,
             req_reassembler: Reassembler::new(ReassemblerConfig::new(mode.clone())),
             resp_segmenter: Segmenter::new(SegmenterConfig::classic(mode)),
             server,
@@ -195,11 +210,19 @@ where
     /// `server.handle`. On flow control needed, emits FC frame to `can_outbox`.
     /// Also handles FC frames arriving from the gateway (responding to our
     /// response segmenter's multi-frame transmissions).
+    /// Delivers a CAN frame that arrived on this node's bus.
+    ///
+    /// Takes the whole frame rather than just its bytes so the arrival CAN ID survives
+    /// to the UDS layer. On classic CAN the functional address *is* a distinct CAN ID -
+    /// 0x7DF conventionally - so discarding the arrival ID here would make a broadcast
+    /// indistinguishable from a physically addressed request, and node-side addressing
+    /// impossible to implement above this point.
     pub fn handle_can_frame(
         &mut self,
-        data: &[u8],
+        frame: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), EcuNodeError<H::Error>> {
+        let data = frame.data;
         // Check if this is a flow control frame for our response segmenter
         // FC frames have upper nibble 0x3 - if we are waiting for FC, feed it
         if let Some(&first) = data.first() {
@@ -230,9 +253,33 @@ where
                         .map_err(|_| EcuNodeError::FrameTooLong)?;
                     self.req_reassembler.reset();
 
-                    // Feed UDS request to server
+                    // Feed UDS request to server.
+                    //
+                    // `dst` is this node's own request CAN ID, which makes the server's
+                    // addressing check a tautology here for now: `handle_can_frame` does
+                    // not receive the CAN ID the frame actually arrived on, so a
+                    // functionally addressed request is indistinguishable from a
+                    // physical one at this layer. The arrival ID has to be threaded
+                    // through ISO-TP before node-side filtering means anything on CAN.
+                    // Translate the arrival CAN identifier into the UDS address
+                    // space before delivery. The server compares logical addresses and
+                    // must never need to know what a CAN ID is - that is the layering
+                    // this crate exists to preserve.
+                    // Three outcomes, not two. A frame on some other CAN ID is not
+                    // ours at all, and defaulting it to "physical" would make this node
+                    // answer every request on the bus.
+                    let uds_dst = if frame.dst.0 == self.request_can_id {
+                        u32::from(self.server.physical_address())
+                    } else if frame.dst.0 == self.functional_can_id {
+                        u32::from(self.server.functional_address())
+                    } else {
+                        return Ok(());
+                    };
+
+                    let uds_frame =
+                        InboundFrame::new(frame.src.clone(), NodeAddress(uds_dst), &buf);
                     self.server
-                        .handle(&NodeAddress(self.request_can_id), &buf, now)
+                        .handle(&uds_frame, now)
                         .map_err(EcuNodeError::Server)?;
                 } else {
                     self.req_reassembler.reset();

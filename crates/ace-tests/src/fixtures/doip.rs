@@ -26,7 +26,7 @@ use aced::server::{handler::ServerHandler, security_provider::SecurityProvider};
 use aced::sim::{
     can_bus::{CanFaultConfig, CanSimBus},
     clock::Duration,
-    io::NodeAddress,
+    io::{InboundFrame, NodeAddress},
     tcp_bus::{TcpFaultConfig, TcpSimBus},
 };
 
@@ -552,7 +552,34 @@ impl<
                                 can_now,
                             );
                         } else if src_id == gw.gateway_addr.0 {
-                            let _ = ecu.node.handle_can_frame(&envelope.data, can_now);
+                            let can_frame = InboundFrame::new(
+                                envelope.src.clone(),
+                                envelope.dst.clone(),
+                                &envelope.data,
+                            );
+                            let _ = ecu.node.handle_can_frame(&can_frame, can_now);
+                        }
+                    }
+
+                    // A functionally addressed request is a single frame on a shared
+                    // identifier that every ECU listening there receives. `find` returns
+                    // one ECU and so cannot express it.
+                    //
+                    // That this lives in the harness at all is the CAN-demux library gap
+                    // recorded in the readiness plan: an integrator has to know this to
+                    // support broadcasts, which is exactly what a library should own.
+                    if src_id == gw.gateway_addr.0 {
+                        for ecu in gw.ecus.iter_mut() {
+                            if ecu.node.functional_can_id != dst_id {
+                                continue;
+                            }
+
+                            let can_frame = InboundFrame::new(
+                                envelope.src.clone(),
+                                envelope.dst.clone(),
+                                &envelope.data,
+                            );
+                            let _ = ecu.node.handle_can_frame(&can_frame, can_now);
                         }
                     }
 
@@ -560,7 +587,12 @@ impl<
                         let pci = envelope.data.first().copied().unwrap_or(0);
 
                         if pci & 0xF0 == 0x30 && src_id == gw.gateway_addr.0 {
-                            let _ = ecu.node.handle_can_frame(&envelope.data, can_now);
+                            let can_frame = InboundFrame::new(
+                                envelope.src.clone(),
+                                envelope.dst.clone(),
+                                &envelope.data,
+                            );
+                            let _ = ecu.node.handle_can_frame(&can_frame, can_now);
                         } else if src_id == ecu.response_can_id {
                             let _ = gw.gateway.handle_can(
                                 &NodeAddress(dst_id),
@@ -1057,6 +1089,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
                     ecu.logical_address,
                     ecu.request_can_id,
                     ecu.response_can_id,
+                    ecu.functional_can_id,
                     ecu.addressing_mode.clone(),
                     server,
                 );

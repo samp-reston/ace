@@ -9,7 +9,7 @@
 
 use crate::bus::SimBus;
 use crate::clock::{Duration, Instant};
-use crate::io::NodeAddress;
+use crate::io::{InboundFrame, NodeAddress};
 use ace_core::Vec;
 
 pub use ace_core::node::DiagnosticNode;
@@ -25,7 +25,7 @@ pub use ace_core::node::DiagnosticNode;
 /// this on a path where a node error matters.
 pub trait SimNodeErased<const MAX_FRAME: usize, const MAX_OUTBOX: usize> {
     fn address(&self) -> &NodeAddress;
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant);
+    fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant);
     fn tick(&mut self, now: Instant);
     fn drain_outbox(
         &mut self,
@@ -43,8 +43,8 @@ where
         DiagnosticNode::address(self)
     }
 
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) {
-        if let Err(e) = DiagnosticNode::handle(self, src, data, now) {
+    fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant) {
+        if let Err(e) = DiagnosticNode::handle(self, frame, now) {
             // In no_std we cannot print but the error is available for
             // inspection via a debugger or a custom hook. Errors are
             // intentionally swallowed here - the simulation continues.
@@ -102,11 +102,19 @@ impl<const N: usize, const Q: usize> SimRunner<N, Q> {
         let mut count = 0;
 
         for envelope in &delivered {
+            // Counts frames put on the segment, not node deliveries: each frame
+            // below is offered to every node, so counting per node would inflate
+            // this by the node count and contradict what it documents.
+            count += 1;
+
             for node in nodes.iter_mut() {
-                if *node.address() == envelope.dst {
-                    let _ = node.handle(&envelope.src, &envelope.data, now);
-                    count += 1;
-                }
+                // Offered to every node on the segment, as a real CAN or Ethernet
+                // link does. Filtering by destination here made the harness do the
+                // nodes' job, so a node that cannot filter its own traffic looked
+                // correct in simulation and would answer everything in production.
+                let frame =
+                    InboundFrame::new(envelope.src.clone(), envelope.dst.clone(), &envelope.data);
+                let _ = node.handle(&frame, now);
             }
         }
 

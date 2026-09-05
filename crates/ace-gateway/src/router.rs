@@ -45,6 +45,22 @@ impl<const MAX_PENDING: usize> PendingRouteTable<MAX_PENDING> {
         }
     }
 
+    /// Total routes this table can hold.
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        MAX_PENDING
+    }
+
+    /// How many further routes can be recorded.
+    ///
+    /// Needed to decide a fan-out before performing it: a functionally addressed request
+    /// needs one route per responding ECU, and committing some of them and then running
+    /// out leaves responses that can never be matched back to a tester.
+    #[must_use]
+    pub fn remaining(&self) -> usize {
+        MAX_PENDING.saturating_sub(self.entries.len())
+    }
+
     /// Records a forwarded request.
     pub fn insert(&mut self, route: PendingRoute) -> bool {
         if self.entries.len() >= MAX_PENDING {

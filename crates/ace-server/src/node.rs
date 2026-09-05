@@ -63,11 +63,10 @@ where
     /// layer decides whether to reset or continue.
     fn handle(
         &mut self,
-        src: &ace_core::io::NodeAddress,
-        data: &[u8],
+        frame: &ace_core::io::InboundFrame<'_>,
         now: ace_core::clock::Instant,
     ) -> Result<(), Self::Error> {
-        UdsServer::handle(self, src, data, now)
+        UdsServer::handle(self, frame, now)
     }
 
     /// Advances internal timers.
