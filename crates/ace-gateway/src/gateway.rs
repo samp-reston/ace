@@ -18,7 +18,10 @@ use ace_can::{
 };
 use ace_core::storage::CapacityError;
 use ace_core::{FrameWrite, Vec};
-use ace_core::{clock::Instant, io::NodeAddress};
+use ace_core::{
+    clock::Instant,
+    io::{InboundFrame, NodeAddress},
+};
 use ace_doip::{
     error::DoipError,
     ext::DoipFrameExt,
@@ -280,12 +283,22 @@ where
     ///
     /// Validates the header, dispatches on payload type, and drives the connection state machine
     /// for the originating tester.
+    /// Handles a DoIP frame seen on the TCP segment.
+    ///
+    /// Ignores frames addressed elsewhere. Previously this took only a source address, so
+    /// it had no way to tell whether a frame was for it and whatever drove the gateway had
+    /// to decide - which meant the destination check lived outside the library.
     pub fn handle_tcp(
         &mut self,
-        src: &NodeAddress,
-        data: &[u8],
+        inbound: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), GatewayError> {
+        if inbound.dst.0 != self.address.0 {
+            return Ok(());
+        }
+
+        let src = &inbound.src;
+        let data = inbound.data;
         let frame = DoipFrame::from_slice(data);
 
         if let Err(_) = frame.validate_header() {
@@ -323,13 +336,30 @@ where
     ///
     /// The NodeAddress carries the CAN response ID so the router can match it to the originating
     /// tester.
-    pub fn handle_can(
+    /// Handles a CAN frame seen on the segment.
+    ///
+    /// Takes every frame on the bus and decides for itself which are its own, rather than
+    /// relying on the caller to route. The dispatch below is by arrival identifier: a
+    /// frame on an ECU's request identifier is that ECU's flow control, and one on its
+    /// response identifier is response payload.
+    pub fn handle_can_frame(
         &mut self,
-        src: &NodeAddress,
-        data: &[u8],
+        frame: &InboundFrame<'_>,
         _now: Instant,
     ) -> Result<(), GatewayError> {
-        let can_id = src.0;
+        // A CAN controller does not accept its own transmissions. The gateway sends
+        // requests on the very identifiers it reads flow control from, so without this
+        // its own outgoing frames would be fed back into its own request segmenter.
+        //
+        // Deliberately not load-bearing: removing it currently fails no test, because
+        // `handle_flow_control` rejects a data frame and that error is discarded just
+        // below. Stating the rule here does not depend on that.
+        if frame.src.0 == self.address.0 {
+            return Ok(());
+        }
+
+        let data = frame.data;
+        let can_id = frame.dst.0;
 
         if let Some(isotp) = self
             .isotp_nodes

@@ -25,7 +25,7 @@ use aced::gateway::tester::{
     ConnectionId, DoipConnectionConfig, DoipConnectionPhase, DoipNodeProfile, DoipTester,
     DoipTesterError, DoipTesterEvent, TargetId,
 };
-use aced::sim::io::NodeAddress;
+use aced::sim::io::{InboundFrame, NodeAddress};
 use core::time::Duration;
 use std::{
     io::{Read, Write},
@@ -282,15 +282,21 @@ impl DoipVehicleDriver {
         let now = self.wall_clock_now();
 
         while let Ok(msg) = self.tcp_rx.try_recv() {
-            let _ = self
-                .tester
-                .handle(&NodeAddress(msg.connection_id.0 as u32), &msg.data, now);
+            // Real traffic arrives on a socket already bound to this tester, so the
+            // destination is this tester by construction.
+            let inbound = InboundFrame::new(
+                NodeAddress(msg.connection_id.0 as u32),
+                self.tester.address().clone(),
+                &msg.data,
+            );
+            let _ = self.tester.handle(&inbound, now);
         }
 
         while let Ok(data) = self.udp_rx.try_recv() {
             for (conn_id, _) in &self.tcp_writers {
                 let gateway_addr = NodeAddress(conn_id.0 as u32);
-                let _ = self.tester.handle(&gateway_addr, &data, now);
+                let inbound = InboundFrame::new(gateway_addr, self.tester.address().clone(), &data);
+                let _ = self.tester.handle(&inbound, now);
             }
         }
 

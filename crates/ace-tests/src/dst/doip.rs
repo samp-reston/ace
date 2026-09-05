@@ -309,6 +309,64 @@ fn p7_unservable_functional_request_is_silent() {
 
 // endregion: P7
 
+// region: P8 - destination filtering is observable with more than one node
+
+const GATEWAY_B: u16 = 0x0E81;
+
+/// Two gateways on one segment, each with its own ECU and its own identifiers.
+///
+/// A single-gateway topology cannot test destination filtering: a frame for the wrong
+/// recipient is also the wrong *payload type* for it, so payload dispatch rejects it and
+/// the missing address check never shows. With two gateways, a routing activation meant
+/// for one is a perfectly valid routing activation to the other.
+fn two_gateway_scenario(seed: u64) -> MyDoipDstScenario {
+    DoipDstScenarioBuilder::<MAX_GATEWAYS, MAX_NODES>::new(seed)
+        .with_gateway(
+            GatewayNodeConfig::new(GATEWAY_ADDR, crate::fixtures::doip::TESTER_ADDR)
+                .with_ecu(EcuNodeConfig::new(0x0001, 0x7E0, 0x7E8, 0x7EF)),
+        )
+        .add_gateway(
+            GatewayNodeConfig::new(GATEWAY_B, crate::fixtures::doip::TESTER_ADDR)
+                .with_ecu(EcuNodeConfig::new(0x0011, 0x7E4, 0x7EC, 0x7EE)),
+        )
+        .build()
+}
+
+/// P8: a gateway ignores a frame addressed to a different gateway.
+///
+/// Each gateway must activate exactly once, from its own request. Without the destination
+/// check, both gateways answer both routing activations and the tester sees more
+/// activations than it asked for - each gateway acting on traffic that was never its own.
+///
+/// IGNORED, and the reason is the point: `TcpSimBus` owns a *single* connection and
+/// `connect` returns early once it is established, so the tester's second connection never
+/// leaves `Disconnected` and this topology cannot be built. That also means the gateway's
+/// `MAX_TESTERS` slots, its per-tester routing and `remove_tester` are all unexercised, and
+/// destination filtering cannot be proven by any test: with one peer, a frame for the wrong
+/// recipient is also the wrong payload type for it, so payload dispatch rejects it and a
+/// missing address check never shows. See the readiness plan's multi-connection item.
+#[test]
+#[ignore = "TcpSimBus supports a single connection; see the multi-connection plan item"]
+fn p8_gateway_ignores_frames_addressed_to_another_gateway() {
+    let mut s = two_gateway_scenario(0);
+    s.connect();
+    s.tick_n(80);
+
+    let events = s.drain_events();
+    let activations = events
+        .iter()
+        .filter(|(_, _, e)| matches!(e, DoipTesterEvent::ActivationSucceeded))
+        .count();
+
+    assert_eq!(
+        activations, 2,
+        "expected exactly one activation per gateway, got {activations} - \
+         a gateway acted on a frame addressed elsewhere"
+    );
+}
+
+// endregion: P8
+
 // region: P3 - RDBI over DoIP after session change
 
 #[test]

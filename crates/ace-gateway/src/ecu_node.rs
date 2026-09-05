@@ -32,6 +32,19 @@ use ace_server::{
     server::{ServerError, UdsServer},
 };
 
+/// What a frame arriving on the CAN segment means to an ECU node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CanArrival {
+    /// A request addressed to this node alone.
+    PhysicalRequest,
+
+    /// A request broadcast to every node on the segment.
+    FunctionalRequest,
+
+    /// The peer's flow control for a multi-frame response this node is sending.
+    FlowControlForOurResponse,
+}
+
 // region: EcuNodeError
 
 #[derive(Debug)]
@@ -217,27 +230,71 @@ where
     /// 0x7DF conventionally - so discarding the arrival ID here would make a broadcast
     /// indistinguishable from a physically addressed request, and node-side addressing
     /// impossible to implement above this point.
+    /// Decides whether a frame on the segment is this node's, and what it means.
+    ///
+    /// `None` is the common case on a shared bus: most frames belong to somebody else.
+    fn classify_arrival(&self, frame: &InboundFrame<'_>) -> Option<CanArrival> {
+        // A CAN controller does not accept its own transmissions. This node's flow
+        // control is addressed to its request identifier, so without this it would come
+        // back and be classified as a fresh request.
+        //
+        // Deliberately not load-bearing: removing it currently fails no test, because a
+        // flow-control PCI fed to the request reassembler is rejected and the error is
+        // discarded by the caller. That makes the correctness of this layer depend on a
+        // swallowed error one layer down, which is what this states explicitly instead.
+        if frame.src.0 == self.response_can_id {
+            return None;
+        }
+
+        // Flow control is the one PCI that travels against the direction of data, which
+        // is what distinguishes it from a request arriving on the same identifier.
+        let is_flow_control = frame.data.first().is_some_and(|first| first & 0xF0 == 0x30);
+
+        if is_flow_control && frame.dst.0 == self.response_can_id {
+            return Some(CanArrival::FlowControlForOurResponse);
+        }
+
+        if frame.dst.0 == self.request_can_id {
+            return Some(CanArrival::PhysicalRequest);
+        }
+
+        if frame.dst.0 == self.functional_can_id {
+            return Some(CanArrival::FunctionalRequest);
+        }
+
+        None
+    }
+
     pub fn handle_can_frame(
         &mut self,
         frame: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), EcuNodeError<H::Error>> {
         let data = frame.data;
-        // Check if this is a flow control frame for our response segmenter
-        // FC frames have upper nibble 0x3 - if we are waiting for FC, feed it
-        if let Some(&first) = data.first() {
-            if first & 0xF0 == 0x30 {
-                // Flow control for our response segmenter
-                if let Err(e) = self.resp_segmenter.handle_flow_control(data) {
-                    // Non-fatal - segmenter may not be waiting for FC
-                    let _ = e;
-                } else {
-                    // Drain any newly unblocked consecutive frames
-                    self.drain_resp_segmenter()?;
-                }
 
+        // Acceptance is decided here, before any ISO-TP state is touched.
+        //
+        // This decision used to sit at the far end of the function: flow control was fed
+        // to the response segmenter and payload to the request reassembler first, and
+        // only then was the destination checked. Every frame on the segment therefore
+        // mutated this node's state even when it belonged to another ECU, and the node
+        // was correct only because whatever drove it filtered first - which a real ECU
+        // has nobody to do for it.
+        let arrival = match self.classify_arrival(frame) {
+            Some(a) => a,
+            None => return Ok(()),
+        };
+
+        if matches!(arrival, CanArrival::FlowControlForOurResponse) {
+            if self.resp_segmenter.handle_flow_control(data).is_err() {
+                // Non-fatal: the segmenter may not be waiting for flow control.
                 return Ok(());
             }
+
+            // Drain any newly unblocked consecutive frames.
+            self.drain_resp_segmenter()?;
+
+            return Ok(());
         }
 
         // Otherwise feed into request reassembler
@@ -253,27 +310,18 @@ where
                         .map_err(|_| EcuNodeError::FrameTooLong)?;
                     self.req_reassembler.reset();
 
-                    // Feed UDS request to server.
-                    //
-                    // `dst` is this node's own request CAN ID, which makes the server's
-                    // addressing check a tautology here for now: `handle_can_frame` does
-                    // not receive the CAN ID the frame actually arrived on, so a
-                    // functionally addressed request is indistinguishable from a
-                    // physical one at this layer. The arrival ID has to be threaded
-                    // through ISO-TP before node-side filtering means anything on CAN.
-                    // Translate the arrival CAN identifier into the UDS address
-                    // space before delivery. The server compares logical addresses and
-                    // must never need to know what a CAN ID is - that is the layering
-                    // this crate exists to preserve.
-                    // Three outcomes, not two. A frame on some other CAN ID is not
-                    // ours at all, and defaulting it to "physical" would make this node
-                    // answer every request on the bus.
-                    let uds_dst = if frame.dst.0 == self.request_can_id {
-                        u32::from(self.server.physical_address())
-                    } else if frame.dst.0 == self.functional_can_id {
-                        u32::from(self.server.functional_address())
-                    } else {
-                        return Ok(());
+                    // Translate the arrival identifier into the UDS address space. The
+                    // server compares logical addresses and must never need to know what
+                    // a CAN identifier is - that is the layering this crate preserves.
+                    let uds_dst = match arrival {
+                        CanArrival::PhysicalRequest => u32::from(self.server.physical_address()),
+                        CanArrival::FunctionalRequest => {
+                            u32::from(self.server.functional_address())
+                        }
+                        CanArrival::FlowControlForOurResponse => {
+                            debug_assert!(false, "flow control returns before reassembly");
+                            return Ok(());
+                        }
                     };
 
                     let uds_frame =

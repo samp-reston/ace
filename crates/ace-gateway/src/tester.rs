@@ -1076,13 +1076,22 @@ impl<
 
     // region: SimNode Surface
 
+    /// Handles a DoIP frame seen on the TCP segment.
+    ///
+    /// Ignores frames addressed elsewhere, rather than trusting the caller to have
+    /// filtered. With every frame on the segment offered to every node, a tester that
+    /// accepted whatever it was handed would consume another tester's responses.
     pub fn handle(
         &mut self,
-        src: &NodeAddress,
-        data: &[u8],
+        inbound: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), DoipTesterError> {
-        let gateway_address = src.0 as u16;
+        if inbound.dst.0 != self.address.0 {
+            return Ok(());
+        }
+
+        let data = inbound.data;
+        let gateway_address = inbound.src.0 as u16;
 
         let frame = DoipFrame::from_slice(data);
         if frame.validate_header().is_ok() {

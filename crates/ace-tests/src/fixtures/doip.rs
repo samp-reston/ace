@@ -488,15 +488,16 @@ impl<
         }
 
         for envelope in &tcp_delivered {
-            if let Some(gw) = self
-                .gateways
-                .iter_mut()
-                .find(|g| g.gateway_addr == envelope.dst)
-            {
-                let _ = gw.gateway.handle_tcp(&envelope.src, &envelope.data, now);
-            } else if envelope.dst == tester_addr {
-                let _ = self.tester.handle(&envelope.src, &envelope.data, now);
+            // Offered to every node on the segment, as with CAN. Each decides whether the
+            // frame is addressed to it; the harness no longer picks a recipient.
+            let frame =
+                InboundFrame::new(envelope.src.clone(), envelope.dst.clone(), &envelope.data);
+
+            for gw in self.gateways.iter_mut() {
+                let _ = gw.gateway.handle_tcp(&frame, now);
             }
+
+            let _ = self.tester.handle(&frame, now);
         }
 
         let _ = self.tester.tick(now);
@@ -540,66 +541,26 @@ impl<
 
             for gw in self.gateways.iter_mut() {
                 for envelope in &can_delivered {
-                    let dst_id = envelope.dst.0;
-                    let src_id = envelope.src.0;
-
-                    if let Some(ecu) = gw.ecus.iter_mut().find(|e| e.request_can_id == dst_id) {
-                        let pci = envelope.data.first().copied().unwrap_or(0);
-                        if pci & 0xF0 == 0x30 && src_id != gw.gateway_addr.0 {
-                            let _ = gw.gateway.handle_can(
-                                &NodeAddress(dst_id),
-                                &envelope.data,
-                                can_now,
-                            );
-                        } else if src_id == gw.gateway_addr.0 {
-                            let can_frame = InboundFrame::new(
-                                envelope.src.clone(),
-                                envelope.dst.clone(),
-                                &envelope.data,
-                            );
-                            let _ = ecu.node.handle_can_frame(&can_frame, can_now);
-                        }
-                    }
-
-                    // A functionally addressed request is a single frame on a shared
-                    // identifier that every ECU listening there receives. `find` returns
-                    // one ECU and so cannot express it.
+                    // Every frame is offered to every node on the segment, as a real CAN
+                    // link does. Each node decides whether the frame is its own.
                     //
-                    // That this lives in the harness at all is the CAN-demux library gap
-                    // recorded in the readiness plan: an integrator has to know this to
-                    // support broadcasts, which is exactly what a library should own.
-                    if src_id == gw.gateway_addr.0 {
-                        for ecu in gw.ecus.iter_mut() {
-                            if ecu.node.functional_can_id != dst_id {
-                                continue;
-                            }
+                    // This replaced roughly fifty lines of routing that used to live
+                    // here: matching arrival identifiers against each ECU's request and
+                    // response identifiers, reading PCI nibbles to recognise flow
+                    // control, and comparing sources to work out direction. All of that
+                    // is protocol behaviour, so an integrator had to reimplement it
+                    // before their own ECUs would receive anything - and the nodes
+                    // appeared correct only because this code was filtering for them.
+                    let frame = InboundFrame::new(
+                        envelope.src.clone(),
+                        envelope.dst.clone(),
+                        &envelope.data,
+                    );
 
-                            let can_frame = InboundFrame::new(
-                                envelope.src.clone(),
-                                envelope.dst.clone(),
-                                &envelope.data,
-                            );
-                            let _ = ecu.node.handle_can_frame(&can_frame, can_now);
-                        }
-                    }
+                    let _ = gw.gateway.handle_can_frame(&frame, can_now);
 
-                    if let Some(ecu) = gw.ecus.iter_mut().find(|e| e.response_can_id == dst_id) {
-                        let pci = envelope.data.first().copied().unwrap_or(0);
-
-                        if pci & 0xF0 == 0x30 && src_id == gw.gateway_addr.0 {
-                            let can_frame = InboundFrame::new(
-                                envelope.src.clone(),
-                                envelope.dst.clone(),
-                                &envelope.data,
-                            );
-                            let _ = ecu.node.handle_can_frame(&can_frame, can_now);
-                        } else if src_id == ecu.response_can_id {
-                            let _ = gw.gateway.handle_can(
-                                &NodeAddress(dst_id),
-                                &envelope.data,
-                                can_now,
-                            );
-                        }
+                    for ecu in gw.ecus.iter_mut() {
+                        let _ = ecu.node.handle_can_frame(&frame, can_now);
                     }
                 }
 
