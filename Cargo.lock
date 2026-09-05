@@ -35,7 +35,6 @@ dependencies = [
  "ace-core",
  "ace-proto",
  "ace-server",
- "ace-sim",
  "ace-uds",
 ]
 
@@ -54,7 +53,6 @@ dependencies = [
  "ace-core",
  "ace-macros",
  "ace-proto",
- "ace-sim",
  "ace-uds",
  "bytes",
  "derive_more",
@@ -75,7 +73,6 @@ dependencies = [
  "ace-macros",
  "ace-proto",
  "ace-server",
- "ace-sim",
  "heapless",
 ]
 
@@ -107,7 +104,6 @@ version = "0.5.5"
 dependencies = [
  "ace-core",
  "ace-proto",
- "ace-sim",
  "ace-uds",
 ]
 

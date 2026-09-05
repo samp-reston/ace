@@ -17,6 +17,7 @@ use ace_can::{
     Segmenter, SegmenterConfig,
 };
 use ace_core::{FrameWrite, Vec};
+use ace_core::{clock::Instant, io::NodeAddress};
 use ace_doip::{
     error::DoipError,
     ext::DoipFrameExt,
@@ -28,7 +29,6 @@ use ace_doip::{
     session::{ActivationAuthProvider, ActivationStateMachine, ConnectionEvent, ConnectionState},
 };
 use ace_proto::DoipFrame;
-use ace_sim::{clock::Instant, io::NodeAddress};
 
 use crate::{
     config::GatewayConfig,

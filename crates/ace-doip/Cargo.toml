@@ -18,9 +18,9 @@ alloc = [
 	"ace-proto/alloc",
 	"ace-uds/alloc",
 	"ace-macros/alloc",
-	"ace-sim/alloc",
+	
 ]
-std = ["alloc", "ace-core/std", "ace-proto/std", "ace-sim/std"]
+std = ["alloc", "ace-core/std", "ace-proto/std"]
 tokio = ["dep:tokio-util", "alloc", "dep:bytes"]
 
 [dependencies]
@@ -28,7 +28,6 @@ ace-macros = { workspace = true }
 ace-core = { workspace = true }
 ace-proto = { workspace = true }
 ace-uds = { workspace = true }
-ace-sim = { workspace = true }
 
 derive_more = { workspace = true, features = ["display", "from"] }
 bytes = { workspace = true, optional = true }

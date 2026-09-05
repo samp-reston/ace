@@ -20,13 +20,13 @@ use ace_can::{
     Segmenter, SegmenterConfig,
 };
 use ace_core::Vec;
+use ace_core::{clock::Instant, io::NodeAddress};
 use ace_server::{
     NrcError,
     handler::ServerHandler,
     security_provider::SecurityProvider,
     server::{ServerError, UdsServer},
 };
-use ace_sim::{clock::Instant, io::NodeAddress};
 
 // region: EcuNodeError
 

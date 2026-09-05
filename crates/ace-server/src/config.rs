@@ -1,7 +1,7 @@
 // region: Imports
 
 use ace_core::Vec;
-use ace_sim::clock::Duration;
+use ace_core::clock::Duration;
 
 // endregion: Imports
 
@@ -10,7 +10,7 @@ use ace_sim::clock::Duration;
 /// Periodic transmission rate presets.
 /// Arbitrary intervals are supported - these are provided for convenience.
 pub mod periodic {
-    use ace_sim::clock::Duration;
+    use ace_core::clock::Duration;
 
     /// 2000ms - Slow
     pub const SLOW: Duration = Duration::from_millis(2_000);

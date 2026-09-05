@@ -12,7 +12,7 @@ use ace_can::{
     SegmentResult, Segmenter, SegmenterConfig,
 };
 use ace_core::Vec;
-use ace_sim::{clock::Instant, io::NodeAddress};
+use ace_core::{clock::Instant, io::NodeAddress};
 
 // endregion: Imports
 

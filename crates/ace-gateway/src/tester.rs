@@ -20,6 +20,10 @@
 // use crate::gateway::{TCP_MAX_FRAME, TCP_MAX_OUTBOX};
 use ace_client::{ClientError, client::UdsClient, config::ClientConfig, event::ClientEvent};
 use ace_core::{FrameRead, FrameWrite, Vec};
+use ace_core::{
+    clock::{Duration, Instant},
+    io::{LinkEvent, NodeAddress},
+};
 use ace_doip::{
     error::DoipError,
     ext::DoipFrameExt,
@@ -34,11 +38,6 @@ use ace_proto::{
     doip::constants::{
         DOIP_COMMON_EID_LEN, DOIP_COMMON_VIN_LEN, DOIP_VEHICLE_ANNOUNCEMENT_GID_LEN,
     },
-};
-use ace_sim::{
-    clock::{Duration, Instant},
-    io::NodeAddress,
-    tcp_bus::TcpEvent,
 };
 
 // endregion: Imports
@@ -1102,39 +1101,39 @@ impl<
 
     // endregion: SimNode Surface
 
-    // region: TcpEventHandler
+    // region: ConnectionEventHandler
 
-    pub fn on_tcp_event(&mut self, event: &TcpEvent, now: Instant) {
+    pub fn on_tcp_event(&mut self, event: &LinkEvent, now: Instant) {
         match event {
-            TcpEvent::ConnectionEstablished { to, .. } => {
+            LinkEvent::ConnectionEstablished { to, .. } => {
                 let gateway = to.0 as u16;
                 if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
                     let _ = conn.on_connected(now);
                 }
             }
-            TcpEvent::ConnectionReset { to, .. } => {
+            LinkEvent::ConnectionReset { to, .. } => {
                 let gateway = to.0 as u16;
                 if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
                     conn.on_reset();
                 }
             }
-            TcpEvent::ConnectionRefused { to, .. } => {
+            LinkEvent::ConnectionRefused { to, .. } => {
                 let gateway = to.0 as u16;
                 if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
                     conn.on_refused();
                 }
             }
-            TcpEvent::ConnectionTimeout { to, .. } => {
+            LinkEvent::ConnectionTimeout { to, .. } => {
                 let gateway = to.0 as u16;
                 if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
                     conn.on_timeout();
                 }
             }
-            TcpEvent::ConnectionClosed { .. } => {}
+            LinkEvent::ConnectionClosed { .. } => {}
         }
     }
 
-    // endregion: TcpEventHandler
+    // endregion: ConnectionEventHandler
 
     // region: Event API
 

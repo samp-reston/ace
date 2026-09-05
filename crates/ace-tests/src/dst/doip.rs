@@ -13,7 +13,7 @@
 
 use aced::client::event::ClientEvent;
 use aced::gateway::tester::{DoipConnectionPhase, DoipTesterEvent};
-use aced::sim::{clock::Duration, io::NodeAddress, tcp_bus::TcpEvent};
+use aced::sim::{clock::Duration, io::NodeAddress, tcp_bus::LinkEvent};
 
 use crate::{
     fixtures::{
@@ -296,7 +296,7 @@ fn p5_full_stack_light_faults() {
                 if t3_counter >= T3_TICKS {
                     let now = s.tcp_bus.now();
                     s.tester.on_tcp_event(
-                        &TcpEvent::ConnectionEstablished {
+                        &LinkEvent::ConnectionEstablished {
                             from: s.tester.address().clone(),
                             to: gw_addr.clone(),
                         },

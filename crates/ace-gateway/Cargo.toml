@@ -20,11 +20,10 @@ alloc = [
 	"ace-macros/alloc",
 	"ace-client/alloc",
 	"ace-server/alloc",
-	"ace-sim/alloc",
+	
 ]
 
 [dependencies]
-ace-sim = { workspace = true }
 ace-doip = { workspace = true }
 ace-can = { workspace = true }
 ace-proto = { workspace = true }

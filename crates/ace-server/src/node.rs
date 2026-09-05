@@ -6,11 +6,11 @@ use crate::{
     server::{ServerError, UdsServer},
 };
 use ace_core::Vec;
-use ace_sim::node::SimNode;
+use ace_core::node::DiagnosticNode;
 
 // endregion: Imports
 
-// region: SimNode for UdsServer
+// region: DiagnosticNode for UdsServer
 
 impl<
     const MAX_FRAME: usize,
@@ -28,7 +28,7 @@ impl<
     const MAX_PERIODIC: usize,
     H,
     S,
-> SimNode<MAX_FRAME, MAX_OUTBOX>
+> DiagnosticNode<MAX_FRAME, MAX_OUTBOX>
     for UdsServer<
         MAX_FRAME,
         MAX_OUTBOX,
@@ -52,7 +52,7 @@ where
 {
     type Error = ServerError<H::Error>;
 
-    fn address(&self) -> &ace_sim::io::NodeAddress {
+    fn address(&self) -> &ace_core::io::NodeAddress {
         UdsServer::address(self)
     }
 
@@ -63,9 +63,9 @@ where
     /// layer decides whether to reset or continue.
     fn handle(
         &mut self,
-        src: &ace_sim::io::NodeAddress,
+        src: &ace_core::io::NodeAddress,
         data: &[u8],
-        now: ace_sim::clock::Instant,
+        now: ace_core::clock::Instant,
     ) -> Result<(), Self::Error> {
         UdsServer::handle(self, src, data, now)
     }
@@ -74,7 +74,7 @@ where
     ///
     /// Called by the SimRunner on every tick regardless of whether any messages were
     /// delivered. Drives the S3 watchdog and periodic DID scheduling.
-    fn tick(&mut self, now: ace_sim::clock::Instant) -> Result<(), Self::Error> {
+    fn tick(&mut self, now: ace_core::clock::Instant) -> Result<(), Self::Error> {
         UdsServer::tick(self, now)
     }
 
@@ -84,10 +84,10 @@ where
     /// the SimBus.
     fn drain_outbox(
         &mut self,
-        out: &mut Vec<(ace_sim::io::NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
+        out: &mut Vec<(ace_core::io::NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
     ) -> usize {
         UdsServer::drain_outbox(self, out)
     }
 }
 
-// endregion: SimNode for UdsServer
+// endregion: DiagnosticNode for UdsServer

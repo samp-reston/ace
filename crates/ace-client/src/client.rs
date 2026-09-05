@@ -1,9 +1,9 @@
 // region: Imports
 
 use ace_core::Vec;
+use ace_core::clock::{Duration, Instant};
+use ace_core::io::NodeAddress;
 use ace_proto::{UdsFrame, common::RawFrame};
-use ace_sim::clock::{Duration, Instant};
-use ace_sim::io::NodeAddress;
 use ace_uds::ext::UdsFrameExt;
 
 use crate::{ClientError, config::ClientConfig, event::ClientEvent, pending::PendingRequest};

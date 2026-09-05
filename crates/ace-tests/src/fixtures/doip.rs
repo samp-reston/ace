@@ -675,7 +675,7 @@ impl<
 
         let now = self.tcp_bus.now();
         self.tester.on_tcp_event(
-            &aced::sim::tcp_bus::TcpEvent::ConnectionReset {
+            &aced::sim::tcp_bus::LinkEvent::ConnectionReset {
                 from: tester_addr,
                 to: gateway_addr,
             },

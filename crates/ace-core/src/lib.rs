@@ -12,6 +12,18 @@ pub use iter::FrameIter;
 pub mod storage;
 pub use storage::Vec;
 
+pub mod clock;
+pub use clock::{Clock, Duration, Instant};
+
+pub mod io;
+pub use io::{FrameTransport, LinkEvent, MessageTransport, NodeAddress, RawMessage};
+
+pub mod node;
+pub use node::DiagnosticNode;
+
+pub mod rng;
+pub use rng::Rng;
+
 // region: Addressing
 
 pub trait DiagnosticAddress: Clone + core::fmt::Debug {

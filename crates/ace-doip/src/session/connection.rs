@@ -12,7 +12,7 @@ use crate::{
     session::{ActivationAuthProvider, ActivationDenialReason, ActivationStateMachine},
 };
 use ace_core::FrameRead;
-use ace_sim::clock::{Duration, Instant};
+use ace_core::clock::{Duration, Instant};
 
 // endregion: Imports
 

@@ -11,7 +11,7 @@ use crate::{
     clock::{Duration, Instant},
     io::NodeAddress,
     node::SimNodeErased,
-    tcp_bus::{TcpEvent, TcpSimBus},
+    tcp_bus::{LinkEvent, TcpSimBus},
 };
 use ace_core::Vec;
 
@@ -27,7 +27,7 @@ use ace_core::Vec;
 /// Not all nodes need TCP event awareness - only the `DoipTester` and gateway face nodes need it.
 /// Nodes that do not implement this trait simply ignore connection events.
 pub trait TcpEventHandler {
-    fn on_tcp_event(&mut self, event: &TcpEvent, now: Instant);
+    fn on_tcp_event(&mut self, event: &LinkEvent, now: Instant);
 }
 
 // endregion: TcpEventHandler
@@ -94,7 +94,7 @@ impl<
             }
         }
 
-        let tcp_events: Vec<TcpEvent, TCP_MAX_EVENTS> = self.bus.drain_events().collect();
+        let tcp_events: Vec<LinkEvent, TCP_MAX_EVENTS> = self.bus.drain_events().collect();
         for event in &tcp_events {
             for handler in tcp_event_nodes.iter_mut() {
                 handler.on_tcp_event(event, now);

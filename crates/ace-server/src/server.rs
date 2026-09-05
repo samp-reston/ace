@@ -1,9 +1,9 @@
 // region: Imports
 
 use ace_core::Vec;
+use ace_core::clock::{Duration, Instant};
+use ace_core::io::NodeAddress;
 use ace_proto::uds::UdsFrame;
-use ace_sim::clock::{Duration, Instant};
-use ace_sim::io::NodeAddress;
 use ace_uds::ext::UdsFrameExt;
 use ace_uds::message::ServiceIdentifier;
 use ace_uds::message::service::UdsServiceRequest;

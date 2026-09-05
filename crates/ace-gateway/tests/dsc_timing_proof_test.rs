@@ -22,11 +22,11 @@
 //! out at the old deadline, and must time out at the new (correctly
 //! converted) one.
 
+use ace_core::clock::{Duration, Instant};
 use ace_core::codec::FrameWrite;
 use ace_doip::header::{DoipHeader, PayloadType, ProtocolVersion};
 use ace_doip::payload::{ActivationCode, RoutingActivationResponse};
 use ace_gateway::tester::{DoipConnection, DoipConnectionConfig, DoipTesterEvent};
-use ace_sim::clock::{Duration, Instant};
 
 const MAX_TARGETS: usize = 4;
 const TCP_MAX_FRAME: usize = 256;
@@ -151,7 +151,7 @@ fn activate(conn: &mut Connection, now: Instant) {
 
 fn drain_outbox(conn: &mut Connection) {
     let mut discard: ace_core::Vec<
-        (ace_sim::io::NodeAddress, ace_core::Vec<u8, TCP_MAX_FRAME>),
+        (ace_core::io::NodeAddress, ace_core::Vec<u8, TCP_MAX_FRAME>),
         TCP_MAX_OUTBOX,
     > = ace_core::Vec::new();
     let _ = conn.drain_outbox(&mut discard);

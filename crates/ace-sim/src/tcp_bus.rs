@@ -93,7 +93,7 @@ pub enum TcpConnectionState {
     },
 
     /// Connection was reset by the bus fault injector. Nodes will observe this as a
-    /// `TcpEvent::ConnectionReset`
+    /// `LinkEvent::ConnectionReset`
     Reset,
 }
 
@@ -105,31 +105,14 @@ impl TcpConnectionState {
 
 // endregion: TcpConnectionState
 
-// region: TcpEvent
+// region: LinkEvent
 
-/// Events the `TcpSimBus` delivers to nodes alongside messages.
-///
-/// Nodes train these via `TcpSimBus::drain_events()` after each tick.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TcpEvent {
-    /// A connection request from `from` to `to` was accepted.
-    ConnectionEstablished { from: NodeAddress, to: NodeAddress },
+// Connection lifecycle events are a foundation abstraction and live in
+// `ace-core::io`: a real socket reports the same transitions this bus
+// synthesises from its fault injector.
+pub use ace_core::io::LinkEvent;
 
-    /// A connection request was refused by the bus fault injector.
-    ConnectionRefused { from: NodeAddress, to: NodeAddress },
-
-    /// A connection request timed out
-    ConnectionTimeout { from: NodeAddress, to: NodeAddress },
-
-    /// An established connection was reset by the bus fault injector. Both nodes should threat
-    /// this as a TCP RST
-    ConnectionReset { from: NodeAddress, to: NodeAddress },
-
-    /// The connection was closed cleanly by one of the nodes.
-    ConnectionClosed { from: NodeAddress, to: NodeAddress },
-}
-
-// endregion: TcpEvent
+// endregion: LinkEvent
 
 // region: TcpSimBus
 
@@ -159,7 +142,7 @@ pub struct TcpSimBus<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_M
     connect_timeout: Duration,
 
     /// Accumulated TCP events for nodes to drain.
-    events: Vec<TcpEvent, TCP_MAX_EVENTS>,
+    events: Vec<LinkEvent, TCP_MAX_EVENTS>,
 
     /// Dedicated RNG for TCP-level fault decisions, seeded independently from the message-level
     /// RNG so fault regimes can be composed freely.
@@ -189,7 +172,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
     /// Requests a TCP connection from `from` to `to`.
     ///
     /// The connection may be established, refused, or timeout depending on the `TcpFaultConfig`.
-    /// The outcome appears as a `TcpEvent` on the next `tick`.
+    /// The outcome appears as a `LinkEvent` on the next `tick`.
     pub fn connect(&mut self, from: NodeAddress, to: NodeAddress) {
         if self.connection.is_connected() {
             return;
@@ -202,7 +185,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
             self.tcp_faults.connection_refused.0,
             self.tcp_faults.connection_refused.1,
         ) {
-            let _ = self.events.push(TcpEvent::ConnectionRefused {
+            let _ = self.events.push(LinkEvent::ConnectionRefused {
                 from: from.clone(),
                 to: to.clone(),
             });
@@ -229,14 +212,14 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
 
         let _ = self
             .events
-            .push(TcpEvent::ConnectionEstablished { from, to });
+            .push(LinkEvent::ConnectionEstablished { from, to });
     }
 
     /// Closes the connection cleanly from the given node.
     pub fn disconnect(&mut self, from: NodeAddress, to: NodeAddress) {
         if self.connection.is_connected() {
             self.connection = TcpConnectionState::Disconnected;
-            let _ = self.events.push(TcpEvent::ConnectionClosed { from, to });
+            let _ = self.events.push(LinkEvent::ConnectionClosed { from, to });
         }
     }
 
@@ -281,7 +264,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
 
                 self.connection = TcpConnectionState::Disconnected;
 
-                let _ = self.events.push(TcpEvent::ConnectionTimeout {
+                let _ = self.events.push(LinkEvent::ConnectionTimeout {
                     from: from.clone(),
                     to: NodeAddress(0),
                 });
@@ -301,7 +284,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
                 {
                     self.connection = TcpConnectionState::Reset;
 
-                    let _ = self.events.push(TcpEvent::ConnectionReset {
+                    let _ = self.events.push(LinkEvent::ConnectionReset {
                         from: initiator,
                         to: acceptor,
                     });
@@ -328,7 +311,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
     }
 
     /// Drains accumulated TCP events.
-    pub fn drain_events(&mut self) -> impl Iterator<Item = TcpEvent> + '_ {
+    pub fn drain_events(&mut self) -> impl Iterator<Item = LinkEvent> + '_ {
         self.events.drain(..)
     }
 

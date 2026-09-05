@@ -12,11 +12,10 @@ categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
-alloc = ["ace-core/alloc", "ace-uds/alloc", "ace-sim/alloc"]
-std = ["alloc", "ace-core/std", "ace-uds/std", "ace-sim/std"]
+alloc = ["ace-core/alloc", "ace-uds/alloc"]
+std = ["alloc", "ace-core/std", "ace-uds/std"]
 
 [dependencies]
 ace-core = { workspace = true }
 ace-uds = { workspace = true }
-ace-sim = { workspace = true }
 ace-proto = { workspace = true }
