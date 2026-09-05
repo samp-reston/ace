@@ -221,18 +221,23 @@ impl<
 > TargetState<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
     fn new(
+        tester_address: u16,
         address: u16,
         default_p2: Duration,
         default_p2_star: Duration,
         timing_tolerance: Duration,
     ) -> Self {
-        let config = ClientConfig::new(0, address)
+        // The client's own address is the *tester's*, and its target is the server it
+        // speaks to. This previously declared address zero and then passed the target's
+        // address as the client's own identity, so a client's notion of itself was both
+        // wrong and unused - nothing read it until responses had to be validated.
+        let config = ClientConfig::new(tester_address, address)
             .with_p2_timeout(default_p2)
             .with_p2_extended_timeout(default_p2_star);
 
         Self {
             address,
-            client: UdsClient::new(config, NodeAddress(address as u32)),
+            client: UdsClient::new(config, NodeAddress(tester_address as u32)),
             p2: default_p2,
             p2_star: default_p2_star,
             timing_tolerance,
@@ -374,6 +379,7 @@ impl<
 
         self.targets
             .push(TargetState::new(
+                self.tester_address,
                 target_address,
                 self.config.default_p2,
                 self.config.default_p2_star,

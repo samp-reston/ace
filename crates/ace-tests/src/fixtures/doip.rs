@@ -284,7 +284,7 @@ pub struct DoipDstScenario<
     S: SecurityProvider,
 {
     pub config: DoipScenarioConfig,
-    pub tcp_bus: TcpSimBus<MAX_DATA, MAX_QUEUED, TCP_MAX_EVENTS>,
+    pub tcp_bus: TcpSimBus<MAX_DATA, MAX_QUEUED, TCP_MAX_EVENTS, MAX_GATEWAY_ADDRS>,
     pub can_bus: CanSimBus<CAN_MAX_FRAME, CAN_MAX_OUTBOX>,
     pub tester: DoipTester<
         MAX_GATEWAYS,

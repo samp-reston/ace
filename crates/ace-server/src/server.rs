@@ -22,6 +22,14 @@ use crate::security_provider::SecurityProvider;
 #[derive(Debug)]
 pub enum ServerError<E: NrcError> {
     Handler(E),
+
+    /// A pending request was completed when none was outstanding.
+    ///
+    /// Reported rather than ignored: a caller answering a request the server is not waiting
+    /// on has lost track of its own work, and silently dropping the response would leave the
+    /// real request to expire instead.
+    NoPendingRequest,
+
     Codec(ace_uds::error::UdsError),
     OutboxFull,
 
@@ -35,6 +43,24 @@ pub enum ServerError<E: NrcError> {
 }
 
 // endregion: ServerError
+
+// region: PendingRequest
+
+/// A request answered with `0x78` and awaiting its final response.
+#[derive(Debug, Clone)]
+struct PendingRequest {
+    /// Who to answer. Kept because the final response must reach the original requester
+    /// even though no frame is in hand when it is produced.
+    dst: NodeAddress,
+
+    /// The SID being answered, so the final response carries the right one.
+    sid: u8,
+
+    /// When another `0x78` is due if the work has still not finished.
+    deadline: Instant,
+}
+
+// endregion: PendingRequest
 
 // region: SessionState
 
@@ -274,6 +300,13 @@ pub struct UdsServer<
     security: SecurityState<MAX_SEED, MAX_SECURITY_LEVELS>,
     periodic: PeriodicState<MAX_PERIODIC>,
 
+    /// The request this server has answered with `0x78` and not yet finished.
+    ///
+    /// ISO 14229-1 makes the final response mandatory once `0x78` has been sent, so this is
+    /// state rather than a predicate: the obligation outlives the request that created it and
+    /// cannot be recomputed from a later frame.
+    pending: Option<PendingRequest>,
+
     /// How the request currently being handled was addressed.
     ///
     /// Per-request and transient: set at the top of [`Self::handle`] and read by
@@ -336,6 +369,7 @@ where
             session: SessionState::new(),
             security: SecurityState::new(),
             periodic: PeriodicState::new(),
+            pending: None,
             inbound: AddressMode::Physical,
             outbox: Vec::new(),
         }
@@ -378,6 +412,31 @@ where
         frame: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), ServerError<H::Error>> {
+        match self.dispatch_inbound(frame, now) {
+            Err(ServerError::Handler(error)) => {
+                // A handler's error *is* a negative response code - that is what the
+                // `NrcError` bound on `ServerHandler::Error` means. Every one of them used
+                // to escape to the caller instead, so a handler refusing a request produced
+                // no answer at all: the client waited out P2 for a response the server had
+                // already decided not to send, and whatever drove the server saw a Rust
+                // error it could do nothing useful with.
+                //
+                // Routing them through `nrc` is also what makes `response_pending`
+                // reachable, since that is where `0x78` is recognised.
+                let request_sid = frame.data.first().copied().unwrap_or(0);
+                let requester = frame.src.clone();
+
+                self.nrc(&requester, request_sid, error, now)
+            }
+            other => other,
+        }
+    }
+
+    fn dispatch_inbound(
+        &mut self,
+        frame: &InboundFrame<'_>,
+        now: Instant,
+    ) -> Result<(), ServerError<H::Error>> {
         let src = &frame.src;
         let data = frame.data;
 
@@ -397,6 +456,19 @@ where
         };
 
         self.session.last_rx = now;
+
+        // UDS allows one request at a time on a physical connection. Accepting a second
+        // while a response is still pending would leave two requests competing for one
+        // pending slot, and the first - already promised an answer - would never get one.
+        if self.pending.is_some() {
+            let sid = data.first().copied().unwrap_or(0);
+            return self.nrc_raw_unconditional(
+                &frame.dst.clone(),
+                sid,
+                H::Error::busy_repeat_request().into(),
+                now,
+            );
+        }
 
         let frame = UdsFrame::from_slice(data);
 
@@ -484,7 +556,34 @@ where
     /// Advances internal timers - S3 watchdog and periodic DID scheduling.
     pub fn tick(&mut self, now: Instant) -> Result<(), ServerError<H::Error>> {
         self.check_s3(now);
+        self.refresh_pending(now)?;
         self.dispatch_periodic(now)
+    }
+
+    /// Re-sends `0x78` when the P2* budget for a pending request runs out.
+    ///
+    /// ISO 14229-1 permits repeated response-pending messages, each restarting P2*. Without
+    /// this the client's extended deadline would expire while the server was still working,
+    /// and the client would declare a timeout on a request the server fully intends to
+    /// answer - the exact confusion `0x78` exists to prevent.
+    fn refresh_pending(&mut self, now: Instant) -> Result<(), ServerError<H::Error>> {
+        let Some(pending) = self.pending.as_ref() else {
+            return Ok(());
+        };
+
+        if now < pending.deadline {
+            return Ok(());
+        }
+
+        let dst = pending.dst.clone();
+        let sid = pending.sid;
+        let next_deadline = now + self.p2_extended();
+
+        if let Some(pending) = self.pending.as_mut() {
+            pending.deadline = next_deadline;
+        }
+
+        self.nrc_raw_unconditional(&dst, sid, H::Error::response_pending().into(), now)
     }
 
     /// Drains pending outbound frames into `out`.
@@ -632,7 +731,84 @@ where
         _now: Instant,
     ) -> Result<(), ServerError<H::Error>> {
         let nrc_byte: u8 = error.into();
+
+        // `0x78` is not a refusal, it is a promise. A handler returning it says the request
+        // was accepted and is still being worked on, so instead of terminating the exchange
+        // the server records the obligation to finish it.
+        if nrc_byte == H::Error::response_pending().into() {
+            return self.begin_pending(dst, request_sid, _now);
+        }
+
         self.nrc_raw(dst, request_sid, nrc_byte, _now)
+    }
+
+    /// The P2* budget for the active session, defaulting to this server's configured value.
+    fn p2_extended(&self) -> Duration {
+        self.config
+            .find_session(self.session.session_type)
+            .map(|s| s.p2_extended_timeout)
+            .unwrap_or(Duration::from_millis(DEFAULT_P2_EXT))
+    }
+
+    /// Records that a request is still being worked on and tells the client so.
+    fn begin_pending(
+        &mut self,
+        dst: &NodeAddress,
+        request_sid: u8,
+        now: Instant,
+    ) -> Result<(), ServerError<H::Error>> {
+        self.pending = Some(PendingRequest {
+            dst: dst.clone(),
+            sid: request_sid,
+            deadline: now + self.p2_extended(),
+        });
+
+        // Sent unconditionally. ISO 14229-1: once this NRC is used the server shall always
+        // send a final response, independent of the suppress-positive bit and of the
+        // suppression required for the five "not implemented" codes on a functionally
+        // addressed request. A promise that could itself be suppressed would be worthless.
+        self.nrc_raw_unconditional(dst, request_sid, H::Error::response_pending().into(), now)
+    }
+
+    /// Whether a request is awaiting its final response.
+    pub fn has_pending_request(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// Answers a pending request positively with `payload`.
+    ///
+    /// The counterpart to a handler returning `response_pending`: the long-running work
+    /// finishes outside the request that started it and hands its result back here. The
+    /// response is sent regardless of how the original request was addressed or whether it
+    /// asked for positive responses to be suppressed, because `0x78` has already committed
+    /// the server to answering.
+    pub fn complete_pending(
+        &mut self,
+        payload: &[u8],
+        now: Instant,
+    ) -> Result<(), ServerError<H::Error>> {
+        let Some(pending) = self.pending.take() else {
+            return Err(ServerError::NoPendingRequest);
+        };
+
+        self.pos(&pending.dst, pending.sid, payload, now)
+    }
+
+    /// Answers a pending request negatively.
+    ///
+    /// For work that was accepted and then failed. Also unconditional - the client is owed
+    /// an answer either way, and a failure it never hears about is indistinguishable to it
+    /// from a server that stopped responding.
+    pub fn fail_pending(
+        &mut self,
+        error: H::Error,
+        now: Instant,
+    ) -> Result<(), ServerError<H::Error>> {
+        let Some(pending) = self.pending.take() else {
+            return Err(ServerError::NoPendingRequest);
+        };
+
+        self.nrc_raw_unconditional(&pending.dst, pending.sid, error.into(), now)
     }
 
     /// NRCs ISO 14229-1 requires a server to withhold on a functionally addressed
@@ -758,7 +934,12 @@ where
                     s.p2_extended_timeout.as_millis() / 10,
                 )
             })
-            .unwrap_or((DEFAULT_P2, DEFAULT_P2_EXT));
+            // Both branches must be in the units the response encodes: P2 in milliseconds
+            // and P2* in tens of milliseconds. The fallback previously used the configured
+            // value verbatim while the session branch divided by ten, so a server with no
+            // matching session config advertised a P2* ten times longer than it honours -
+            // and a client that believed it would wait ten times too long before giving up.
+            .unwrap_or((DEFAULT_P2, DEFAULT_P2_EXT / 10));
 
         let payload = [
             session_type,
@@ -790,13 +971,19 @@ where
             }
         };
 
+        // Attempted before it is confirmed. This previously sent the positive response
+        // first, so a reset the handler then refused had already been reported as
+        // successful - and with handler errors now reaching the client, it would have
+        // produced a positive response and a negative one for the same request.
+        self.handler
+            .ecu_reset(reset_type)
+            .map_err(ServerError::Handler)?;
+
         if !suppressed {
             self.pos(src, 0x11, &[reset_type], now)?;
         }
 
-        self.handler
-            .ecu_reset(reset_type)
-            .map_err(ServerError::Handler)
+        Ok(())
     }
 
     fn on_security_access(

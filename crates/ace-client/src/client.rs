@@ -100,6 +100,20 @@ impl<
     /// DID low byte could theoretically have bit 6 set. Explicit subscription registry takes
     /// priority.
     pub fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant) -> Result<(), ClientError> {
+        // A response has to be for this client, and from the server this client addressed.
+        //
+        // Both were previously ignored. On a shared segment that is not survivable: every
+        // frame reaches every node, so a client accepting whatever it was handed would match
+        // another tester's response to its own pending request - completing it with a payload
+        // meant for somebody else, which is worse than the timeout it should have had.
+        //
+        // Requires a physically addressed target, which is what `ClientConfig` documents both
+        // of its addresses to be. A client addressing a functional group would receive
+        // responses from individual servers and could not use the source check.
+        if frame.dst.0 != self.address.0 || frame.src.0 != self.server.0 {
+            return Ok(());
+        }
+
         let data = frame.data;
         // Nothing to do for empty frames
         let first = match data.first().copied() {

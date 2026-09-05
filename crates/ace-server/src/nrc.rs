@@ -45,6 +45,14 @@ pub trait NrcError: Into<u8> + core::fmt::Debug {
     fn wrong_block_sequence_counter() -> Self;
     /// 0x78 - requestCorrectlyReceivedResponsePending
     fn response_pending() -> Self;
+
+    /// 0x21 - busyRepeatRequest.
+    ///
+    /// The server cannot take this request now and the client should retry it. Needed
+    /// because UDS allows one request at a time on a physical connection: a second request
+    /// arriving while a response is still pending has to be refused, and refusing it with
+    /// anything else would tell the client something untrue about the request itself.
+    fn busy_repeat_request() -> Self;
     /// 0x7E - subFunctionNotSupportedInActiveSession
     fn sub_function_not_supported_in_active_session() -> Self;
     /// 0x7F - serviceNotSupportedInActiveSession
@@ -80,6 +88,7 @@ pub enum BuiltinNrc {
     GeneralProgrammingFailure = 0x72,
     WrongBlockSequenceCounter = 0x73,
     ResponsePending = 0x78,
+    BusyRepeatRequest = 0x21,
     SubFunctionNotSupportedInActiveSession = 0x7E,
     ServiceNotSupportedInActiveSession = 0x7F,
 }
@@ -138,6 +147,10 @@ impl NrcError for BuiltinNrc {
     }
     fn response_pending() -> Self {
         Self::ResponsePending
+    }
+
+    fn busy_repeat_request() -> Self {
+        Self::BusyRepeatRequest
     }
     fn sub_function_not_supported_in_active_session() -> Self {
         Self::SubFunctionNotSupportedInActiveSession

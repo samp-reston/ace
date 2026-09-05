@@ -125,9 +125,9 @@ pub enum CanEvent {
 /// `Q` - max frames in-flight simultaneously
 /// Capacity of the bus event queue.
 ///
-/// `CanSimRunner::tick` drains into a buffer of exactly this size, so the two
-/// must agree. Naming it once keeps that invariant expressible instead of
-/// duplicating a literal across two files.
+/// Whoever drives the bus drains events into a buffer of exactly this size, so the two
+/// must agree. Naming it once keeps that invariant expressible instead of duplicating a
+/// literal across two files.
 pub const CAN_MAX_EVENTS: usize = 16;
 
 #[derive(Debug)]

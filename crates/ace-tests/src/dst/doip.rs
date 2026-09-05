@@ -332,25 +332,38 @@ fn two_gateway_scenario(seed: u64) -> MyDoipDstScenario {
         .build()
 }
 
-/// P8: a gateway ignores a frame addressed to a different gateway.
+/// P8: two gateways on one bus each establish their own connection and activate.
 ///
-/// Each gateway must activate exactly once, from its own request. Without the destination
-/// check, both gateways answer both routing activations and the tester sees more
-/// activations than it asked for - each gateway acting on traffic that was never its own.
+/// This was impossible before the bus modelled more than one connection: `connect` returned
+/// early once any connection existed, so the second gateway's link never left
+/// `Disconnected` and only one activation ever occurred. It is the direct test of that fix.
 ///
-/// IGNORED, and the reason is the point: `TcpSimBus` owns a *single* connection and
-/// `connect` returns early once it is established, so the tester's second connection never
-/// leaves `Disconnected` and this topology cannot be built. That also means the gateway's
-/// `MAX_TESTERS` slots, its per-tester routing and `remove_tester` are all unexercised, and
-/// destination filtering cannot be proven by any test: with one peer, a frame for the wrong
-/// recipient is also the wrong payload type for it, so payload dispatch rejects it and a
-/// missing address check never shows. See the readiness plan's multi-connection item.
+/// It deliberately does *not* claim to prove destination filtering. A DoIP routing
+/// activation request carries no target logical address - it is addressed only at the TCP
+/// level - so a gateway answering a request meant for its neighbour produces a response the
+/// tester still attributes to the answering gateway and ignores as already active. Proving
+/// the address checks needs two *testers* on one gateway, where one tester would consume the
+/// other's responses. That is recorded as the open half of the multi-peer work.
 #[test]
-#[ignore = "TcpSimBus supports a single connection; see the multi-connection plan item"]
-fn p8_gateway_ignores_frames_addressed_to_another_gateway() {
+fn p8_two_gateways_each_activate_independently() {
     let mut s = two_gateway_scenario(0);
     s.connect();
     s.tick_n(80);
+
+    assert_eq!(
+        s.tcp_bus.connection_count(),
+        2,
+        "the bus must hold one connection per gateway"
+    );
+
+    for gw in s.gateways.iter() {
+        assert_eq!(
+            s.tester.connection_phase(gw.conn_id),
+            Some(&DoipConnectionPhase::Active),
+            "gateway {:#06X} did not reach Active",
+            gw.logical_address
+        );
+    }
 
     let events = s.drain_events();
     let activations = events
@@ -358,11 +371,7 @@ fn p8_gateway_ignores_frames_addressed_to_another_gateway() {
         .filter(|(_, _, e)| matches!(e, DoipTesterEvent::ActivationSucceeded))
         .count();
 
-    assert_eq!(
-        activations, 2,
-        "expected exactly one activation per gateway, got {activations} - \
-         a gateway acted on a frame addressed elsewhere"
-    );
+    assert_eq!(activations, 2, "one activation per gateway");
 }
 
 // endregion: P8
