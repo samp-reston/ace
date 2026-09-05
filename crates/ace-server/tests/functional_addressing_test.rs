@@ -100,6 +100,9 @@ type TestServer = UdsServer<
 fn server(response_len: usize) -> TestServer {
     let config = ServerConfig::new(PHYSICAL, FUNCTIONAL)
         .with_session(SessionConfig::default_session())
+        // Needed to observe a side effect that is not a response, so the test below can
+        // distinguish "response withheld" from "request not served".
+        .with_session(SessionConfig::extended_session())
         // 0x22 ReadDataByIdentifier and 0x10 DiagnosticSessionControl are supported;
         // everything else is not, which is what makes the "unknown SID" cases possible.
         .with_service(ServiceConfig::new(0x22, &[0x01]))
@@ -311,3 +314,58 @@ fn suppression_does_not_leak_into_the_next_request() {
 }
 
 // endregion: Suppression is per-request, not sticky
+
+// region: Support is independent of addressing
+
+/// A server shall support its list of services regardless of addressing mode.
+///
+/// So suppression is a rule about *transmitting responses*, not about which requests are
+/// served. This is asserted on a side effect rather than on a response, because the two
+/// readings are indistinguishable on the wire in exactly the suppressed cases - an
+/// implementation that refused to serve functionally addressed requests would pass every
+/// test that only watched what came back.
+#[test]
+fn a_supported_service_is_served_identically_on_either_address() {
+    let mut physical = server(2);
+    let out = exchange(&mut physical, PHYSICAL, &[0x10, 0x03]);
+    assert_eq!(out.len(), 1, "physical request answers");
+    assert_eq!(
+        physical.session_type(),
+        0x03,
+        "physically addressed session change took effect"
+    );
+
+    let mut functional = server(2);
+    let out = exchange(&mut functional, FUNCTIONAL, &[0x10, 0x03]);
+    assert_eq!(out.len(), 1, "a served functional request still answers");
+    assert_eq!(
+        functional.session_type(),
+        0x03,
+        "the same request must be served when functionally addressed"
+    );
+}
+
+/// The converse: a suppressed request is still *processed*, it simply is not answered.
+///
+/// A functionally addressed session change to an unsupported session is silent, and the
+/// session must be unchanged - proving the silence came from the response being withheld
+/// rather than the request being discarded before dispatch.
+#[test]
+fn a_suppressed_request_is_processed_not_discarded() {
+    let mut s = server(2);
+
+    let out = exchange(&mut s, FUNCTIONAL, &[0x10, 0x04]);
+    assert!(out.is_empty(), "unsupported sub-function is suppressed");
+    assert_eq!(
+        s.session_type(),
+        0x01,
+        "an unsupported session must not be entered"
+    );
+
+    // And the server is still live for the next request rather than having bailed out.
+    let out = exchange(&mut s, FUNCTIONAL, &[0x10, 0x03]);
+    assert_eq!(out.len(), 1, "the server still serves the next request");
+    assert_eq!(s.session_type(), 0x03);
+}
+
+// endregion: Support is independent of addressing
