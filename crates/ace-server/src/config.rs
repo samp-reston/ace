@@ -256,21 +256,53 @@ impl<
     // region: Builder methods
 
     pub fn with_session(mut self, s: SessionConfig) -> Self {
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.sessions.is_full(),
+            "more entries configured than MAX_SESSIONS allows"
+        );
         let _ = self.sessions.push(s);
         self
     }
 
     pub fn with_service(mut self, s: ServiceConfig) -> Self {
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.services.is_full(),
+            "more entries configured than MAX_SERVICES allows"
+        );
         let _ = self.services.push(s);
         self
     }
 
     pub fn with_did(mut self, d: DidConfig) -> Self {
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.data_identifiers.is_full(),
+            "more entries configured than MAX_DIDS allows"
+        );
         let _ = self.data_identifiers.push(d);
         self
     }
 
+    /// Adds a security level.
+    ///
+    /// Silently ignores the level if more than `MAX_SECURITY_LEVELS` are added, which
+    /// is a configuration error rather than a runtime condition: the level would then
+    /// be unknown to the server, so any service requiring it is refused. The
+    /// assertion catches it in a debug build rather than leaving a level the consumer
+    /// believes is configured quietly absent.
     pub fn with_security_level(mut self, l: SecurityLevelConfig) -> Self {
+        debug_assert!(
+            !self.security_levels.is_full(),
+            "more security levels configured than MAX_SECURITY_LEVELS allows"
+        );
         let _ = self.security_levels.push(l);
         self
     }

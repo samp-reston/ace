@@ -123,6 +123,13 @@ pub enum CanEvent {
 ///
 /// `N` - max frame payload bytes (8 for classic CAN, 64 for CAN FD)
 /// `Q` - max frames in-flight simultaneously
+/// Capacity of the bus event queue.
+///
+/// `CanSimRunner::tick` drains into a buffer of exactly this size, so the two
+/// must agree. Naming it once keeps that invariant expressible instead of
+/// duplicating a literal across two files.
+pub const CAN_MAX_EVENTS: usize = 16;
+
 #[derive(Debug)]
 pub struct CanSimBus<const MAX_DATA: usize, const MAX_QUEUED: usize> {
     /// Underlying message bus.
@@ -135,7 +142,7 @@ pub struct CanSimBus<const MAX_DATA: usize, const MAX_QUEUED: usize> {
     bus_state: CanBusState,
 
     /// Accumulated CAN events for nodes to drain.
-    events: Vec<CanEvent, 16>,
+    events: Vec<CanEvent, CAN_MAX_EVENTS>,
 
     /// Dedicated RNG for CAN-level fault decisions.
     rng: Xorshift64,
@@ -178,7 +185,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
             .rng
             .chance(self.can_faults.bit_error.0, self.can_faults.bit_error.1)
         {
-            let _ = self.events.push(CanEvent::BitError { src: src.clone() });
+            self.emit(CanEvent::BitError { src: src.clone() });
             return false;
         }
 
@@ -195,14 +202,14 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
 
         self.bus_state = CanBusState::BusOff { since: now };
 
-        let _ = self.events.push(CanEvent::BusOff);
+        self.emit(CanEvent::BusOff);
     }
 
     /// Resets the bus from bus-off state back to Active.
     pub fn reset_bus_off(&mut self) {
         if matches!(self.bus_state, CanBusState::BusOff { .. }) {
             self.bus_state = CanBusState::Active;
-            let _ = self.events.push(CanEvent::BusRecovered);
+            self.emit(CanEvent::BusRecovered);
         }
     }
 
@@ -225,7 +232,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
 
                 self.bus_state = CanBusState::BusOff { since: now };
 
-                let _ = self.events.push(CanEvent::BusOff);
+                self.emit(CanEvent::BusOff);
             }
         }
 
@@ -246,6 +253,18 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
     }
 
     /// Drains accumulated CAN events.
+    /// Records a CAN bus event for the runner to drain.
+    ///
+    /// Panics when the queue is full. This is harness code, and the queue is sized
+    /// to what the runner drains each tick, so overflow means the scenario outgrew
+    /// its configuration. Dropping the event instead would let the run complete -
+    /// just not the run that was asked for, with no signal that it diverged.
+    fn emit(&mut self, event: CanEvent) {
+        self.events
+            .push(event)
+            .expect("CAN bus event queue overflowed, which would alter the run");
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = CanEvent> + '_ {
         self.events.drain(..)
     }

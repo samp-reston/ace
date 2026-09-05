@@ -65,9 +65,13 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
 
         for envelope in self.queue.drain(..) {
             if envelope.deliver_at <= now {
-                let _ = delivered.push(envelope);
+                delivered
+                    .push(envelope)
+                    .expect("delivery buffer is sized to the queue");
             } else {
-                let _ = remaining.push(envelope);
+                remaining
+                    .push(envelope)
+                    .expect("remaining buffer is sized to the queue");
             }
         }
 
@@ -113,9 +117,13 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
                 .rng
                 .chance(self.faults.corruption.0, self.faults.corruption.1)
             {
-                let _ = payload.push(byte ^ self.rng.next_u8());
+                payload
+                    .push(byte ^ self.rng.next_u8())
+                    .expect("payload buffer matches the source frame");
             } else {
-                let _ = payload.push(byte);
+                payload
+                    .push(byte)
+                    .expect("payload buffer matches the source frame");
             }
         }
 

@@ -16,7 +16,7 @@ use syn::{Data, DeriveInput, parse_macro_input};
 /// #[frame(error = "UdsError")]
 /// ```
 ///
-/// The error type must implement `Into<DiagError>`.
+/// The error type must implement `Into<CodecError>`.
 ///
 /// # Struct field attributes
 ///

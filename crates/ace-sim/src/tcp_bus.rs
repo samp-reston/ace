@@ -185,7 +185,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
             self.tcp_faults.connection_refused.0,
             self.tcp_faults.connection_refused.1,
         ) {
-            let _ = self.events.push(LinkEvent::ConnectionRefused {
+            self.emit(LinkEvent::ConnectionRefused {
                 from: from.clone(),
                 to: to.clone(),
             });
@@ -219,7 +219,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
     pub fn disconnect(&mut self, from: NodeAddress, to: NodeAddress) {
         if self.connection.is_connected() {
             self.connection = TcpConnectionState::Disconnected;
-            let _ = self.events.push(LinkEvent::ConnectionClosed { from, to });
+            self.emit(LinkEvent::ConnectionClosed { from, to });
         }
     }
 
@@ -264,7 +264,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
 
                 self.connection = TcpConnectionState::Disconnected;
 
-                let _ = self.events.push(LinkEvent::ConnectionTimeout {
+                self.emit(LinkEvent::ConnectionTimeout {
                     from: from.clone(),
                     to: NodeAddress(0),
                 });
@@ -284,7 +284,7 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
                 {
                     self.connection = TcpConnectionState::Reset;
 
-                    let _ = self.events.push(LinkEvent::ConnectionReset {
+                    self.emit(LinkEvent::ConnectionReset {
                         from: initiator,
                         to: acceptor,
                     });
@@ -311,6 +311,18 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize, const TCP_MAX_EVENTS: usize
     }
 
     /// Drains accumulated TCP events.
+    /// Records a link event for the runner to drain.
+    ///
+    /// Panics when the queue is full. This is harness code, and the queue is sized
+    /// to what the runner drains each tick, so overflow means the scenario outgrew
+    /// its configuration. Dropping the event instead would let the run complete -
+    /// just not the run that was asked for, with no signal that it diverged.
+    fn emit(&mut self, event: LinkEvent) {
+        self.events
+            .push(event)
+            .expect("link event queue overflowed, which would alter the run");
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = LinkEvent> + '_ {
         self.events.drain(..)
     }

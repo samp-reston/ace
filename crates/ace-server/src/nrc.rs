@@ -15,6 +15,12 @@ pub trait NrcError: Into<u8> + core::fmt::Debug {
     fn sub_function_not_supported() -> Self;
     /// 0x13 - incorrectMessageLengthOrInvalidFormat
     fn incorrect_message_length_or_invalid_format() -> Self;
+    /// 0x14 - responseTooLong
+    ///
+    /// Emitted when a handler returns more data than the response frame can carry.
+    /// Without this the server has no conformant way to report the condition, and
+    /// its only alternatives are a truncated positive response or silence.
+    fn response_too_long() -> Self;
     /// 0x22 - conditionsNotCorrect
     fn conditions_not_correct() -> Self;
     /// 0x24 - requestSequenceError
@@ -61,6 +67,7 @@ pub enum BuiltinNrc {
     ServiceNotSupported = 0x11,
     SubFunctionNotSupported = 0x12,
     IncorrectMessageLengthOrInvalidFormat = 0x13,
+    ResponseTooLong = 0x14,
     ConditionsNotCorrect = 0x22,
     RequestSequenceError = 0x24,
     RequestOutOfRange = 0x31,
@@ -92,6 +99,9 @@ impl NrcError for BuiltinNrc {
     }
     fn incorrect_message_length_or_invalid_format() -> Self {
         Self::IncorrectMessageLengthOrInvalidFormat
+    }
+    fn response_too_long() -> Self {
+        Self::ResponseTooLong
     }
     fn conditions_not_correct() -> Self {
         Self::ConditionsNotCorrect

@@ -94,7 +94,10 @@ impl<
             }
         }
 
-        let tcp_events: Vec<LinkEvent, TCP_MAX_EVENTS> = self.bus.drain_events().collect();
+        // Shares TCP_MAX_EVENTS with the bus queue, so this cannot overflow.
+        let tcp_events: Vec<LinkEvent, TCP_MAX_EVENTS> =
+            Vec::from_iter_checked(self.bus.drain_events())
+                .expect("event buffer shares TCP_MAX_EVENTS with the bus queue");
         for event in &tcp_events {
             for handler in tcp_event_nodes.iter_mut() {
                 handler.on_tcp_event(event, now);

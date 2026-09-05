@@ -161,7 +161,7 @@ const MAX_CONNECTIONS: usize = 8;
 const MAX_TARGETS: usize = 16;
 const TCP_MAX_OUTBOX: usize = 8;
 const TCP_MAX_FRAME: usize = 4096;
-const MAX_CONNECTION_EVENTS: usize = 8;
+const MAX_CONNECTION_ACTIONS: usize = 8;
 const PENDING: usize = 8;
 const SIM_MAX_FRAME: usize = 4096;
 const SIM_MAX_OUTBOX: usize = 8;
@@ -174,7 +174,7 @@ pub type MyDoipTester = DoipTester<
     MAX_TARGETS,
     TCP_MAX_FRAME,
     TCP_MAX_OUTBOX,
-    MAX_CONNECTION_EVENTS,
+    MAX_CONNECTION_ACTIONS,
     PENDING,
     SIM_MAX_FRAME,
     SIM_MAX_OUTBOX,
@@ -294,7 +294,12 @@ impl DoipVehicleDriver {
             }
         }
 
-        self.tester.tick(now);
+        // Discarded, like the `handle` calls above: this driver runs the tester on
+        // its own thread and has no channel back to the caller, so there is
+        // nowhere to report a failure to. That is a gap in the driver, not an
+        // intentional policy - see the readiness plan's Phase 3 item on giving
+        // the transport driver an error/event channel.
+        let _ = self.tester.tick(now);
 
         self.flush_outbox();
     }
@@ -320,9 +325,9 @@ impl DoipVehicleDriver {
         conn_id: ConnectionId,
         target_address: u16,
         did_low_byte: u8,
-    ) {
+    ) -> Result<(), DoipTesterError> {
         self.tester
-            .subscribe_periodic(conn_id, target_address, did_low_byte);
+            .subscribe_periodic(conn_id, target_address, did_low_byte)
     }
 
     /// Drains all accumulated tester events.
@@ -352,7 +357,12 @@ impl DoipVehicleDriver {
             TCP_MAX_OUTBOX,
         > = aced::core::Vec::new();
 
-        self.tester.drain_outbox(&mut outbox);
+        // Discarded for the same reason as the `handle`/`tick` calls in this driver:
+        // it owns the tester on its own thread with no channel back to the caller.
+        // `outbox` is freshly constructed here with the same bound as the tester's
+        // outbox, so this cannot currently fail - see the readiness plan item on
+        // giving the driver a real error/event channel.
+        let _ = self.tester.drain_outbox(&mut outbox);
 
         for (dst, data) in &outbox {
             let conn_id = ConnectionId(dst.0 as u16);

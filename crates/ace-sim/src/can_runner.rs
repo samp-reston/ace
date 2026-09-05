@@ -8,7 +8,7 @@
 // region: Imports
 
 use crate::{
-    can_bus::{CanEvent, CanSimBus},
+    can_bus::{CAN_MAX_EVENTS, CanEvent, CanSimBus},
     clock::{Duration, Instant},
     io::NodeAddress,
     node::SimNodeErased,
@@ -81,7 +81,12 @@ impl<const MAX_FRAME: usize, const MAX_OUTBOX: usize> CanSimRunner<MAX_FRAME, MA
             }
         }
 
-        let can_events: Vec<CanEvent, 16> = self.bus.drain_events().collect();
+        // Sized to the bus queue, so this cannot overflow. Failing loudly on a
+        // violated invariant is deliberate: silently truncating events would
+        // change what a deterministic run observes, with no visible signal.
+        let can_events: Vec<CanEvent, CAN_MAX_EVENTS> =
+            Vec::from_iter_checked(self.bus.drain_events())
+                .expect("event buffer is sized to the bus queue");
         for event in &can_events {
             for handler in can_event_nodes.iter_mut() {
                 handler.on_can_event(event, now);

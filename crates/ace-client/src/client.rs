@@ -3,6 +3,7 @@
 use ace_core::Vec;
 use ace_core::clock::{Duration, Instant};
 use ace_core::io::NodeAddress;
+use ace_core::storage::CapacityError;
 use ace_proto::{UdsFrame, common::RawFrame};
 use ace_uds::ext::UdsFrameExt;
 
@@ -133,10 +134,10 @@ impl<
 
             self.complete_pending(requested_sid);
 
-            let _ = self.events.push(ClientEvent::NegativeResponse {
+            self.emit(ClientEvent::NegativeResponse {
                 sid: requested_sid,
                 nrc,
-            });
+            })?;
 
             return Ok(());
         }
@@ -154,12 +155,13 @@ impl<
             let raw = frame.as_bytes();
             let record = raw.get(1..).unwrap_or(&[]);
             let mut buf: Vec<u8, MAX_DATA> = Vec::new();
-            let _ = buf.extend_from_slice(&record[..record.len().min(MAX_DATA)]);
+            buf.extend_from_slice(record)
+                .map_err(|_| ClientError::FrameTooLong)?;
 
-            let _ = self.events.push(ClientEvent::PeriodicData {
+            self.emit(ClientEvent::PeriodicData {
                 did: first,
                 data: buf,
-            });
+            })?;
 
             return Ok(());
         }
@@ -176,12 +178,13 @@ impl<
             if self.complete_pending(request_sid) {
                 let payload = frame.payload();
                 let mut buf: Vec<u8, MAX_DATA> = Vec::new();
-                let _ = buf.extend_from_slice(&payload[..payload.len().min(MAX_DATA)]);
+                buf.extend_from_slice(payload)
+                    .map_err(|_| ClientError::FrameTooLong)?;
 
-                let _ = self.events.push(ClientEvent::PositiveResponse {
+                self.emit(ClientEvent::PositiveResponse {
                     sid: request_sid,
                     data: buf,
-                });
+                })?;
 
                 return Ok(());
             }
@@ -196,9 +199,10 @@ impl<
         {
             let raw = frame.as_bytes();
             let mut buf: Vec<u8, MAX_DATA> = Vec::new();
-            let _ = buf.extend_from_slice(&raw[..raw.len().min(MAX_DATA)]);
+            buf.extend_from_slice(raw)
+                .map_err(|_| ClientError::FrameTooLong)?;
 
-            let _ = self.events.push(ClientEvent::Unsolicited { data: buf });
+            self.emit(ClientEvent::Unsolicited { data: buf })?;
         }
 
         // endregion: Unsolicited
@@ -212,13 +216,15 @@ impl<
 
         for p in self.pending.iter() {
             if p.is_expired(now) {
-                let _ = expired.push(p.sid);
+                expired
+                    .push(p.sid)
+                    .map_err(|_| ClientError::EventQueueFull)?;
             }
         }
 
         for sid in expired {
             self.complete_pending(sid);
-            let _ = self.events.push(ClientEvent::Timeout { sid });
+            self.emit(ClientEvent::Timeout { sid })?;
         }
 
         Ok(())
@@ -228,14 +234,21 @@ impl<
     pub fn drain_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, SIM_MAX_FRAME>), SIM_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.outbox.len();
 
         for item in self.outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     // endregion: SimNode Surface
@@ -259,16 +272,20 @@ impl<
         }
 
         let mut frame: Vec<u8, SIM_MAX_FRAME> = Vec::new();
-        let _ = frame.extend_from_slice(data);
+        frame
+            .extend_from_slice(data)
+            .map_err(|_| ClientError::OutboxFull)?;
 
-        if self.outbox.len() >= SIM_MAX_OUTBOX {
-            return Err(ClientError::OutboxFull);
-        }
-        let _ = self.outbox.push((self.server.clone(), frame));
+        self.outbox
+            .push((self.server.clone(), frame))
+            .map_err(|_| ClientError::OutboxFull)?;
 
-        let _ = self
-            .pending
-            .push(PendingRequest::new(sid, now, self.config.p2_timeout));
+        // Propagated, not discarded: an untracked pending request means the response
+        // is never matched and the P2 timeout never fires, so the caller waits
+        // forever on a request the library believes it sent.
+        self.pending
+            .push(PendingRequest::new(sid, now, self.config.p2_timeout))
+            .map_err(|_| ClientError::QueueFull)?;
 
         Ok(())
     }
@@ -286,10 +303,14 @@ impl<
     /// `ReadDataByPeriodicIdentifierResponseData`. For a DID of `0xF201` the low byte is `0x01`.
     ///
     /// Silently does nothing if already subscribed or the registry is full.
-    pub fn subscribe_periodic(&mut self, did_low_byte: u8) {
-        if !self.periodic_dids.contains(&did_low_byte) {
-            let _ = self.periodic_dids.push(did_low_byte);
+    pub fn subscribe_periodic(&mut self, did_low_byte: u8) -> Result<(), ClientError> {
+        if self.periodic_dids.contains(&did_low_byte) {
+            return Ok(());
         }
+
+        self.periodic_dids
+            .push(did_low_byte)
+            .map_err(|_| ClientError::TooManySubscriptions)
     }
 
     /// Removes a periodic DID subscription.
@@ -313,6 +334,17 @@ impl<
     ///
     /// Events are consumed - calling `drain_events` twice returns events on the first call and
     /// nothing on the second.
+    /// Records an observed event for the caller to drain.
+    ///
+    /// Fails rather than dropping. This queue is the client's only channel for
+    /// reporting what it saw, so a silently discarded event means a response the
+    /// caller will never learn about.
+    fn emit(&mut self, event: ClientEvent<MAX_DATA>) -> Result<(), ClientError> {
+        self.events
+            .push(event)
+            .map_err(|_| ClientError::EventQueueFull)
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = ClientEvent<MAX_DATA>> + '_ {
         self.events.drain(..)
     }

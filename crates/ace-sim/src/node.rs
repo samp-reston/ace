@@ -62,7 +62,12 @@ where
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
     ) -> usize {
+        // Unlike `handle` and `tick`, this failure is not a node protocol error to be
+        // swallowed - it means the harness gave the node too small a buffer. Losing
+        // outbound messages would change what a deterministic run observes, so fail
+        // loudly instead of continuing with a silently shortened run.
         DiagnosticNode::drain_outbox(self, out)
+            .expect("outbox buffer smaller than the node's outbox")
     }
 }
 

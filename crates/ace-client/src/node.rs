@@ -40,7 +40,7 @@ impl<
     fn drain_outbox(
         &mut self,
         out: &mut Vec<(ace_core::io::NodeAddress, Vec<u8, SIM_MAX_FRAME>), SIM_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, ace_core::storage::CapacityError> {
         UdsClient::drain_outbox(self, out)
     }
 }

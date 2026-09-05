@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 
 use crate::{
-    DiagError,
+    CodecError,
     codec::{FrameRead, FrameWrite, Writer},
 };
 
@@ -156,7 +156,7 @@ where
 /// copies them out. No re-decode/re-encode cycle is needed or performed.
 /// No bounds on `T` required since the bytes are written as-is.
 impl<'a, T> FrameWrite for FrameIter<'a, T> {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(self.as_slice())

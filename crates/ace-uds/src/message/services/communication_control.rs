@@ -1,5 +1,5 @@
 use crate::{UdsError, ValidationError};
-use ace_core::DiagError;
+use ace_core::CodecError;
 use ace_macros::FrameCodec;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
@@ -98,7 +98,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for CommunicationType {
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let byte = *buf
             .first()
-            .ok_or(UdsError::from(DiagError::LengthMismatch {
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
                 expected: 1,
                 actual: 0,
             }))?;

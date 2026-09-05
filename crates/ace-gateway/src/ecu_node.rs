@@ -20,6 +20,7 @@ use ace_can::{
     Segmenter, SegmenterConfig,
 };
 use ace_core::Vec;
+use ace_core::storage::CapacityError;
 use ace_core::{clock::Instant, io::NodeAddress};
 use ace_server::{
     NrcError,
@@ -35,6 +36,8 @@ pub enum EcuNodeError<SE: NrcError> {
     IsoTp(ace_can::IsoTpError),
     CanOutboxFull,
     Server(ServerError<SE>),
+    /// An assembled frame exceeded its bounded buffer.
+    FrameTooLong,
 }
 
 // endregion: EcuNodeError
@@ -223,7 +226,8 @@ where
             ReassembleResult::Complete { len } => {
                 if let Some(uds_bytes) = self.req_reassembler.message(len) {
                     let mut buf: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                    let _ = buf.extend_from_slice(&uds_bytes[..len.min(CAN_MAX_FRAME)]);
+                    buf.extend_from_slice(&uds_bytes[..len])
+                        .map_err(|_| EcuNodeError::FrameTooLong)?;
                     self.req_reassembler.reset();
 
                     // Feed UDS request to server
@@ -237,13 +241,12 @@ where
             ReassembleResult::FlowControl { frame, len: fc_len } => {
                 // Send FC back to gateway's request segmenter
                 let mut fc: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                let _ = fc.extend_from_slice(&frame[..fc_len]);
+                fc.extend_from_slice(&frame[..fc_len])
+                    .map_err(|_| EcuNodeError::FrameTooLong)?;
 
-                if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                    return Err(EcuNodeError::CanOutboxFull);
-                } else {
-                    self.can_outbox.push((NodeAddress(self.request_can_id), fc));
-                }
+                self.can_outbox
+                    .push((NodeAddress(self.request_can_id), fc))
+                    .map_err(|_| EcuNodeError::CanOutboxFull)?;
             }
             ReassembleResult::InProgress => {}
             ReassembleResult::SessionAborted {
@@ -251,8 +254,13 @@ where
                 fc_len,
             } => {
                 let mut fc: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                let _ = fc.extend_from_slice(&flow_control[..fc_len]);
-                let _ = self.can_outbox.push((NodeAddress(self.request_can_id), fc));
+                fc.extend_from_slice(&flow_control[..fc_len])
+                    .map_err(|_| EcuNodeError::CanOutboxFull)?;
+                // Previously unguarded: an abort flow control frame was dropped with
+                // no check and no signal, stalling the ISO-TP transfer.
+                self.can_outbox
+                    .push((NodeAddress(self.request_can_id), fc))
+                    .map_err(|_| EcuNodeError::CanOutboxFull)?;
 
                 self.req_reassembler.reset();
             }
@@ -272,7 +280,9 @@ where
 
         // Drain server outbox into response segmenter
         let mut srv_out: Vec<(NodeAddress, Vec<u8, UDS_MAX_FRAME>), UDS_MAX_OUTBOX> = Vec::new();
-        self.server.drain_outbox(&mut srv_out);
+        self.server
+            .drain_outbox(&mut srv_out)
+            .map_err(|_| EcuNodeError::FrameTooLong)?;
 
         for (_, uds_data) in &srv_out {
             // Start segmenting the UDS response
@@ -295,14 +305,21 @@ where
     pub fn drain_can_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.can_outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.can_outbox.len();
 
         for item in self.can_outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     // endregion: CAN outbox
@@ -326,15 +343,14 @@ where
                 SegmentResult::WaitForFlowControl => break,
                 SegmentResult::Frame { len } => {
                     let mut frame: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                    let _ = frame.extend_from_slice(&out_buf[..len]);
+                    frame
+                        .extend_from_slice(&out_buf[..len])
+                        .map_err(|_| EcuNodeError::FrameTooLong)?;
 
                     // Frames go to response_can_id - gateway listens there
-                    if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                        return Err(EcuNodeError::CanOutboxFull);
-                    } else {
-                        self.can_outbox
-                            .push((NodeAddress(self.response_can_id), frame));
-                    }
+                    self.can_outbox
+                        .push((NodeAddress(self.response_can_id), frame))
+                        .map_err(|_| EcuNodeError::CanOutboxFull)?;
                 }
             }
         }

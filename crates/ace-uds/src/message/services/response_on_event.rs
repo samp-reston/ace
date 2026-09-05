@@ -1,4 +1,4 @@
-use ace_core::{DiagError, FrameIter, FrameRead, FrameWrite};
+use ace_core::{CodecError, FrameIter, FrameRead, FrameWrite};
 use ace_macros::FrameCodec;
 
 use crate::{UdsError, ValidationError};
@@ -114,7 +114,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for ResponseOnEventRequest<'a> {
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let byte = *buf
             .first()
-            .ok_or(UdsError::from(DiagError::LengthMismatch {
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
                 expected: 1,
                 actual: 0,
             }))?;
@@ -205,7 +205,7 @@ impl<'a> FrameRead<'a> for ResponseOnEventResponse<'a> {
         // Both inner structs read it themselves as their first field.
         let event_type = *buf
             .first()
-            .ok_or(UdsError::from(DiagError::LengthMismatch {
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
                 expected: 1,
                 actual: 0,
             }))?;

@@ -152,7 +152,8 @@ fn p4_session_control_light_faults() {
 
         // Under light faults the exchange must complete - either positive response (message
         // delivered) or timeout (message lost). Neither silence nor panic is acceptable.
-        let events: Vec<_, 32> = s.client.drain_events().collect();
+        let events: Vec<_, 32> = Vec::from_iter_checked(s.client.drain_events())
+            .expect("event buffer too small for this scenario");
 
         let resolved = events.iter().any(|e| {
             matches!(
@@ -183,7 +184,8 @@ fn p4_session_control_chaos_faults() {
 
         // Property: the exchange must have resolved - never left pending indefinitely. Client may
         // report timeout bus must not be silent.
-        let events: Vec<_, 32> = s.client.drain_events().collect();
+        let events: Vec<_, 32> = Vec::from_iter_checked(s.client.drain_events())
+            .expect("event buffer too small for this scenario");
 
         let resolved = events.iter().any(|e| {
             matches!(

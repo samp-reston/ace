@@ -1,4 +1,4 @@
-use crate::DiagError;
+use crate::CodecError;
 
 // region: FrameRead
 
@@ -43,15 +43,15 @@ mod sealed {
 ///
 /// Sealed to prevent downstream implementations.
 pub trait Writer: sealed::Sealed {
-    fn write_bytes(&mut self, data: &[u8]) -> Result<(), DiagError>;
+    fn write_bytes(&mut self, data: &[u8]) -> Result<(), CodecError>;
 }
 
 impl sealed::Sealed for &mut [u8] {}
 
 impl Writer for &mut [u8] {
-    fn write_bytes(&mut self, data: &[u8]) -> Result<(), DiagError> {
+    fn write_bytes(&mut self, data: &[u8]) -> Result<(), CodecError> {
         if self.len() < data.len() {
-            return Err(DiagError::BufferOverflow);
+            return Err(CodecError::BufferTooSmall);
         }
         self[..data.len()].copy_from_slice(data);
         let tmp = core::mem::take(self);
@@ -65,7 +65,7 @@ impl sealed::Sealed for bytes::BytesMut {}
 
 #[cfg(feature = "alloc")]
 impl Writer for bytes::BytesMut {
-    fn write_bytes(&mut self, data: &[u8]) -> Result<(), DiagError> {
+    fn write_bytes(&mut self, data: &[u8]) -> Result<(), CodecError> {
         self.extend_from_slice(data);
         Ok(())
     }
@@ -121,7 +121,7 @@ pub trait IntoOwned {
 
 #[cfg(feature = "alloc")]
 impl<'a> FrameRead<'a> for alloc::vec::Vec<u8> {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let v = buf.to_vec();
@@ -131,10 +131,10 @@ impl<'a> FrameRead<'a> for alloc::vec::Vec<u8> {
 }
 
 impl<'a> FrameRead<'a> for u8 {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
-        let val = buf.first().copied().ok_or(DiagError::LengthMismatch {
+        let val = buf.first().copied().ok_or(CodecError::LengthMismatch {
             expected: 1,
             actual: 0,
         })?;
@@ -144,11 +144,11 @@ impl<'a> FrameRead<'a> for u8 {
 }
 
 impl<'a> FrameRead<'a> for u16 {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         if buf.len() < 2 {
-            return Err(DiagError::LengthMismatch {
+            return Err(CodecError::LengthMismatch {
                 expected: 2,
                 actual: buf.len(),
             });
@@ -160,11 +160,11 @@ impl<'a> FrameRead<'a> for u16 {
 }
 
 impl<'a> FrameRead<'a> for u32 {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         if buf.len() < 4 {
-            return Err(DiagError::LengthMismatch {
+            return Err(CodecError::LengthMismatch {
                 expected: 4,
                 actual: buf.len(),
             });
@@ -176,11 +176,11 @@ impl<'a> FrameRead<'a> for u32 {
 }
 
 impl<'a, const N: usize> FrameRead<'a> for [u8; N] {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         if buf.len() < N {
-            return Err(DiagError::LengthMismatch {
+            return Err(CodecError::LengthMismatch {
                 expected: N,
                 actual: buf.len(),
             });
@@ -194,7 +194,7 @@ impl<'a, const N: usize> FrameRead<'a> for [u8; N] {
 
 /// Consumes all remaining bytes - only valid as a trailing field.
 impl<'a> FrameRead<'a> for &'a [u8] {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let slice = *buf;
@@ -225,7 +225,7 @@ where
 
 #[cfg(feature = "alloc")]
 impl FrameWrite for alloc::vec::Vec<u8> {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(self.as_ref())
@@ -233,7 +233,7 @@ impl FrameWrite for alloc::vec::Vec<u8> {
 }
 
 impl FrameWrite for u8 {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(&[*self])
@@ -241,7 +241,7 @@ impl FrameWrite for u8 {
 }
 
 impl FrameWrite for u16 {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(&self.to_be_bytes())
@@ -249,7 +249,7 @@ impl FrameWrite for u16 {
 }
 
 impl FrameWrite for u32 {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(&self.to_be_bytes())
@@ -257,7 +257,7 @@ impl FrameWrite for u32 {
 }
 
 impl<const N: usize> FrameWrite for [u8; N] {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(self.as_ref())
@@ -265,7 +265,7 @@ impl<const N: usize> FrameWrite for [u8; N] {
 }
 
 impl FrameWrite for &[u8] {
-    type Error = DiagError;
+    type Error = CodecError;
 
     fn encode<W: Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         buf.write_bytes(self)
@@ -288,9 +288,9 @@ impl<T: FrameWrite> FrameWrite for Option<T> {
 // region: Free functions
 
 /// Consumes exactly `n` bytes from the cursor, returning a zero-copy slice.
-pub fn take_n<'a>(buf: &mut &'a [u8], n: usize) -> Result<&'a [u8], DiagError> {
+pub fn take_n<'a>(buf: &mut &'a [u8], n: usize) -> Result<&'a [u8], CodecError> {
     if buf.len() < n {
-        return Err(DiagError::LengthMismatch {
+        return Err(CodecError::LengthMismatch {
             expected: n,
             actual: buf.len(),
         });
@@ -301,7 +301,7 @@ pub fn take_n<'a>(buf: &mut &'a [u8], n: usize) -> Result<&'a [u8], DiagError> {
 }
 
 #[cfg(feature = "alloc")]
-pub fn take_n_owned(buf: &mut &[u8], n: usize) -> Result<alloc::vec::Vec<u8>, DiagError> {
+pub fn take_n_owned(buf: &mut &[u8], n: usize) -> Result<alloc::vec::Vec<u8>, CodecError> {
     take_n(buf, n).map(|s| s.to_vec())
 }
 

@@ -165,7 +165,7 @@ pub struct GatewayEntry<
     const TCP_MAX_OUTBOX: usize,
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const UDS_MAX_FRAME: usize,
     const UDS_MAX_OUTBOX: usize,
@@ -203,7 +203,7 @@ pub struct GatewayEntry<
         MAX_TESTERS,
         MAX_FRAME,
         UDS_MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         MAX_NODES,
         A,
@@ -259,7 +259,7 @@ pub struct DoipDstScenario<
     const ISOTP_MAX_NODES: usize,
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const UDS_MAX_FRAME: usize,
     const UDS_MAX_OUTBOX: usize,
@@ -291,7 +291,7 @@ pub struct DoipDstScenario<
         MAX_NODES,
         TCP_MAX_FRAME,
         TCP_MAX_OUTBOX,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         UDS_MAX_OUTBOX,
         TCP_MAX_FRAME,
         TCP_MAX_OUTBOX,
@@ -306,7 +306,7 @@ pub struct DoipDstScenario<
             TCP_MAX_OUTBOX,
             MAX_TESTERS,
             MAX_FRAME,
-            MAX_CONNECTION_EVENTS,
+            MAX_CONNECTION_ACTIONS,
             MAX_ACTIVATION_TYPES,
             UDS_MAX_FRAME,
             UDS_MAX_OUTBOX,
@@ -346,7 +346,7 @@ impl<
     const ISOTP_MAX_NODES: usize,
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const UDS_MAX_FRAME: usize,
     const UDS_MAX_OUTBOX: usize,
@@ -377,7 +377,7 @@ impl<
         ISOTP_MAX_NODES,
         MAX_TESTERS,
         MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         UDS_MAX_FRAME,
         UDS_MAX_OUTBOX,
@@ -444,11 +444,9 @@ impl<
     pub fn connect(&mut self) {
         let tester_addr = self.tester.address();
 
-        let gw_addrs: Vec<NodeAddress, MAX_GATEWAY_ADDRS> = self
-            .gateways
-            .iter()
-            .map(|g| g.gateway_addr.clone())
-            .collect();
+        let gw_addrs: Vec<NodeAddress, MAX_GATEWAY_ADDRS> =
+            Vec::from_iter_checked(self.gateways.iter().map(|g| g.gateway_addr.clone()))
+                .expect("MAX_GATEWAY_ADDRS too small for the configured gateways");
         for gw_addr in gw_addrs {
             self.tcp_bus.connect(tester_addr.clone(), gw_addr);
         }
@@ -476,9 +474,13 @@ impl<
 
         let tcp_delivered = self.tcp_bus.tick(self.config.tcp_tick);
 
-        let tcp_events: Vec<_, TCP_MAX_OUTBOX> = self.tcp_bus.drain_events().collect();
+        let tcp_events: Vec<_, TCP_MAX_OUTBOX> =
+            Vec::from_iter_checked(self.tcp_bus.drain_events())
+                .expect("event buffer too small for this scenario");
         for event in &tcp_events {
-            self.tester.on_tcp_event(event, now);
+            self.tester
+                .on_tcp_event(event, now)
+                .expect("link event must be accepted");
         }
 
         for gw in self.gateways.iter_mut() {
@@ -497,10 +499,12 @@ impl<
             }
         }
 
-        self.tester.tick(now);
+        let _ = self.tester.tick(now);
 
         let mut tester_out: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX> = Vec::new();
-        self.tester.drain_outbox(&mut tester_out);
+        self.tester
+            .drain_outbox(&mut tester_out)
+            .expect("tester outbox buffer too small for this scenario");
 
         for (dst, data) in &tester_out {
             self.tcp_bus.send(tester_addr.clone(), dst.clone(), data);
@@ -509,7 +513,9 @@ impl<
         for gw in self.gateways.iter_mut() {
             let mut gw_tcp_out: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX> =
                 Vec::new();
-            gw.gateway.drain_tcp_outbox(&mut gw_tcp_out);
+            gw.gateway
+                .drain_tcp_outbox(&mut gw_tcp_out)
+                .expect("outbox buffer too small for this scenario");
 
             for (dst, data) in &gw_tcp_out {
                 self.tcp_bus
@@ -518,7 +524,9 @@ impl<
 
             let mut gw_can_out: Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX> =
                 Vec::new();
-            gw.gateway.drain_can_outbox(&mut gw_can_out);
+            gw.gateway
+                .drain_can_outbox(&mut gw_can_out)
+                .expect("outbox buffer too small for this scenario");
 
             for (dst, data) in &gw_can_out {
                 self.can_bus
@@ -572,7 +580,9 @@ impl<
                         (NodeAddress, Vec<u8, CAN_MAX_FRAME>),
                         CAN_MAX_OUTBOX,
                     > = Vec::new();
-                    ecu.node.drain_can_outbox(&mut ecu_can_out);
+                    ecu.node
+                        .drain_can_outbox(&mut ecu_can_out)
+                        .expect("outbox buffer too small for this scenario");
 
                     for (dst, data) in &ecu_can_out {
                         self.can_bus
@@ -582,7 +592,9 @@ impl<
 
                 let mut gw_can_fc: Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX> =
                     Vec::new();
-                gw.gateway.drain_can_outbox(&mut gw_can_fc);
+                gw.gateway
+                    .drain_can_outbox(&mut gw_can_fc)
+                    .expect("outbox buffer too small for this scenario");
 
                 for (dst, data) in &gw_can_fc {
                     self.can_bus
@@ -591,7 +603,9 @@ impl<
 
                 let mut gw_tcp_resp: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX> =
                     Vec::new();
-                gw.gateway.drain_tcp_outbox(&mut gw_tcp_resp);
+                gw.gateway
+                    .drain_tcp_outbox(&mut gw_tcp_resp)
+                    .expect("outbox buffer too small for this scenario");
 
                 for (dst, data) in &gw_tcp_resp {
                     self.tcp_bus
@@ -664,7 +678,8 @@ impl<
     pub fn drain_events(
         &mut self,
     ) -> Vec<(ConnectionId, TargetId, DoipTesterEvent<MAX_DATA>), MAX_EVENTS> {
-        self.tester.drain_events().collect()
+        Vec::from_iter_checked(self.tester.drain_events())
+            .expect("event buffer too small for this scenario")
     }
 
     // endregion: Convenience Helpers
@@ -674,13 +689,15 @@ impl<
             .disconnect(tester_addr.clone(), gateway_addr.clone());
 
         let now = self.tcp_bus.now();
-        self.tester.on_tcp_event(
-            &aced::sim::tcp_bus::LinkEvent::ConnectionReset {
-                from: tester_addr,
-                to: gateway_addr,
-            },
-            now,
-        );
+        self.tester
+            .on_tcp_event(
+                &aced::sim::tcp_bus::LinkEvent::ConnectionReset {
+                    from: tester_addr,
+                    to: gateway_addr,
+                },
+                now,
+            )
+            .expect("link event must be accepted");
     }
 }
 
@@ -875,7 +892,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
         const ISOTP_MAX_NODES: usize,
         const MAX_TESTERS: usize,
         const MAX_FRAME: usize,
-        const MAX_CONNECTION_EVENTS: usize,
+        const MAX_CONNECTION_ACTIONS: usize,
         const MAX_ACTIVATION_TYPES: usize,
         const UDS_MAX_FRAME: usize,
         const UDS_MAX_OUTBOX: usize,
@@ -907,7 +924,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
         ISOTP_MAX_NODES,
         MAX_TESTERS,
         MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         UDS_MAX_FRAME,
         UDS_MAX_OUTBOX,
@@ -944,7 +961,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
                 TCP_MAX_OUTBOX,
                 MAX_TESTERS,
                 MAX_FRAME,
-                MAX_CONNECTION_EVENTS,
+                MAX_CONNECTION_ACTIONS,
                 MAX_ACTIVATION_TYPES,
                 UDS_MAX_FRAME,
                 UDS_MAX_OUTBOX,

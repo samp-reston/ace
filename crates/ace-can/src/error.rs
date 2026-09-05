@@ -14,12 +14,12 @@ pub enum CanError {
     /// e.g. RTR set on a CAN FD frame, BRS set without EDL.
     InvalidFlags,
     /// Underlying transport error from ace-core.
-    Transport(ace_core::DiagError),
+    Codec(ace_core::CodecError),
 }
 
-impl From<ace_core::DiagError> for CanError {
-    fn from(e: ace_core::DiagError) -> Self {
-        CanError::Transport(e)
+impl From<ace_core::CodecError> for CanError {
+    fn from(e: ace_core::CodecError) -> Self {
+        CanError::Codec(e)
     }
 }
 
@@ -63,9 +63,9 @@ impl From<CanError> for IsoTpError {
     }
 }
 
-impl From<ace_core::DiagError> for IsoTpError {
-    fn from(e: ace_core::DiagError) -> Self {
-        IsoTpError::Can(CanError::Transport(e))
+impl From<ace_core::CodecError> for IsoTpError {
+    fn from(e: ace_core::CodecError) -> Self {
+        IsoTpError::Can(CanError::Codec(e))
     }
 }
 

@@ -3,6 +3,7 @@
 use ace_core::Vec;
 use ace_core::clock::{Duration, Instant};
 use ace_core::io::NodeAddress;
+use ace_core::storage::CapacityError;
 use ace_proto::uds::UdsFrame;
 use ace_uds::ext::UdsFrameExt;
 use ace_uds::message::ServiceIdentifier;
@@ -22,6 +23,14 @@ pub enum ServerError<E: NrcError> {
     Handler(E),
     Codec(ace_uds::error::UdsError),
     OutboxFull,
+
+    /// A response did not fit its frame buffer on a path with no request to answer.
+    ///
+    /// Request/response paths report this condition to the tester as NRC 0x14
+    /// instead. This variant is for unsolicited transmissions - periodic data -
+    /// where there is no NRC channel, so the only honest option is to tell the
+    /// caller rather than send a malformed frame.
+    ResponseTooLong,
 }
 
 // endregion: ServerError
@@ -54,14 +63,24 @@ impl SessionState {
 // region: SecurityState
 
 #[derive(Debug, Clone)]
-struct SecurityState<const MAX_SEED: usize> {
+/// Per-level security bookkeeping.
+///
+/// Both tables are sized by `MAX_SECURITY_LEVELS`, the same bound the consumer
+/// already gives `ServerConfig`. They were previously fixed at 8 regardless, so a
+/// consumer who correctly declared more levels than that got a server whose runtime
+/// state could not track them all - ISO 14229-1 permits far more than 8. Because
+/// `ServerConfig::security_levels` is itself bounded by `MAX_SECURITY_LEVELS`, these
+/// can now always hold an entry for every level the consumer configured.
+struct SecurityState<const MAX_SEED: usize, const MAX_SECURITY_LEVELS: usize> {
     pending_seed: Vec<u8, MAX_SEED>,
     pending_level: u8,
-    failed_attempts: Vec<(u8, u8), 8>,
-    lockout_until: Vec<(u8, Instant), 8>,
+    failed_attempts: Vec<(u8, u8), MAX_SECURITY_LEVELS>,
+    lockout_until: Vec<(u8, Instant), MAX_SECURITY_LEVELS>,
 }
 
-impl<const MAX_SEED: usize> SecurityState<MAX_SEED> {
+impl<const MAX_SEED: usize, const MAX_SECURITY_LEVELS: usize>
+    SecurityState<MAX_SEED, MAX_SECURITY_LEVELS>
+{
     fn new() -> Self {
         Self {
             pending_seed: Vec::new(),
@@ -87,11 +106,19 @@ impl<const MAX_SEED: usize> SecurityState<MAX_SEED> {
             .unwrap_or(0)
     }
 
-    fn increment_failed(&mut self, level: u8) {
+    /// Records a failed attempt for `level`.
+    ///
+    /// Fallible on purpose. `failed_count` returns 0 for a level it is not tracking,
+    /// so an unrecorded failure means the attempt limit never trips and the level
+    /// accepts unlimited key guesses. The caller must treat `Err` as a denial.
+    fn increment_failed(&mut self, level: u8) -> Result<(), CapacityError> {
         if let Some(e) = self.failed_attempts.iter_mut().find(|(l, _)| *l == level) {
             e.1 = e.1.saturating_add(1);
+            Ok(())
         } else {
-            let _ = self.failed_attempts.push((level, 1));
+            self.failed_attempts
+                .push((level, 1))
+                .map_err(|_| CapacityError)
         }
     }
 
@@ -101,11 +128,19 @@ impl<const MAX_SEED: usize> SecurityState<MAX_SEED> {
         }
     }
 
-    fn set_lockout(&mut self, level: u8, until: Instant) {
+    /// Records a lockout for `level` until `until`.
+    ///
+    /// Fallible on purpose. `is_locked` returns false for a level it is not tracking,
+    /// so an unrecorded lockout is never enforced. The caller must treat `Err` as a
+    /// denial rather than proceeding as though the lockout were in place.
+    fn set_lockout(&mut self, level: u8, until: Instant) -> Result<(), CapacityError> {
         if let Some(e) = self.lockout_until.iter_mut().find(|(l, _)| *l == level) {
             e.1 = until;
+            Ok(())
         } else {
-            let _ = self.lockout_until.push((level, until));
+            self.lockout_until
+                .push((level, until))
+                .map_err(|_| CapacityError)
         }
     }
 
@@ -139,7 +174,13 @@ impl<const MAX_PERIODIC: usize> PeriodicState<MAX_PERIODIC> {
         }
     }
 
-    fn register(&mut self, did: u16, interval: Duration, client: NodeAddress, now: Instant) {
+    fn register(
+        &mut self,
+        did: u16,
+        interval: Duration,
+        client: NodeAddress,
+        now: Instant,
+    ) -> Result<(), CapacityError> {
         if let Some(e) = self
             .entries
             .iter_mut()
@@ -147,14 +188,20 @@ impl<const MAX_PERIODIC: usize> PeriodicState<MAX_PERIODIC> {
         {
             e.interval = interval;
             e.next_tx = now + interval;
-            return;
+            return Ok(());
         }
-        let _ = self.entries.push(PeriodicEntry {
-            did,
-            interval,
-            next_tx: now + interval,
-            client,
-        });
+
+        // Reported rather than dropped: silently failing to register leaves the client
+        // with a positive response and no periodic data ever arriving. ISO 14229-1
+        // expects a negative response when the server cannot accept the subscription.
+        self.entries
+            .push(PeriodicEntry {
+                did,
+                interval,
+                next_tx: now + interval,
+                client,
+            })
+            .map_err(|_| CapacityError)
     }
 
     fn cancel(&mut self, did: u16, client: &NodeAddress) {
@@ -162,7 +209,13 @@ impl<const MAX_PERIODIC: usize> PeriodicState<MAX_PERIODIC> {
             .retain(|e| !(e.did == did && &e.client == client));
     }
 
+    /// Collects entries whose next transmission is due into `out`.
+    ///
+    /// Infallible by construction: `out` and `self.entries` share the `MAX_PERIODIC`
+    /// bound and the result is a subset of `entries`, so a caller passing an empty
+    /// `out` cannot overflow it. The pushes below rely on that.
     fn collect_due(&self, now: Instant, out: &mut Vec<(u16, NodeAddress), MAX_PERIODIC>) {
+        debug_assert!(out.is_empty(), "collect_due expects an empty output buffer");
         for e in self.entries.iter().filter(|e| now >= e.next_tx) {
             let _ = out.push((e.did, e.client.clone()));
         }
@@ -217,7 +270,7 @@ pub struct UdsServer<
     security_provider: S,
     address: NodeAddress,
     session: SessionState,
-    security: SecurityState<MAX_SEED>,
+    security: SecurityState<MAX_SEED, MAX_SECURITY_LEVELS>,
     periodic: PeriodicState<MAX_PERIODIC>,
     outbox: Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
 }
@@ -397,12 +450,21 @@ where
     pub fn drain_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.outbox.len();
+
         for item in self.outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
-        n
+
+        Ok(n)
     }
 
     // endregion: SimNode surface
@@ -453,17 +515,12 @@ where
         dst: NodeAddress,
         frame: Vec<u8, MAX_FRAME>,
     ) -> Result<(), ServerError<H::Error>> {
-        if self.outbox.len() >= MAX_OUTBOX {
-            return Err(ServerError::OutboxFull);
-        }
-
-        // The capacity check above guarantees room, so this push cannot fail.
-        // The discard is deliberate rather than a dropped error: `ace_core::Vec`
-        // returns `Result` from `push` when backed by `heapless` and `()` when
-        // backed by `alloc`, so no single expression consumes the value in both
-        // configurations. The guard is what makes this correct. Phase 3 gives
-        // storage a uniform push contract and removes the need for it.
-        let _ = self.outbox.push((dst, frame));
+        // Propagated from the push itself. This replaces a `len() >= MAX_OUTBOX`
+        // guard that existed only because `push` had different signatures in the two
+        // feature configurations; the Phase 3 storage newtype removed that split.
+        self.outbox
+            .push((dst, frame))
+            .map_err(|_| ServerError::OutboxFull)?;
 
         Ok(())
     }
@@ -473,13 +530,41 @@ where
         dst: &NodeAddress,
         request_sid: u8,
         payload: &[u8],
-        _now: Instant,
+        now: Instant,
     ) -> Result<(), ServerError<H::Error>> {
         let mut frame: Vec<u8, MAX_FRAME> = Vec::new();
+
+        // Cannot fail: a server configured with MAX_FRAME < 1 cannot answer anything.
         let _ = frame.push(request_sid | 0x40);
-        let _ = frame.extend_from_slice(payload);
+
+        if frame.extend_from_slice(payload).is_err() {
+            // ISO 14229-1 0x14 responseTooLong. The payload plus the response SID
+            // byte exceeds MAX_FRAME. Truncating instead would put a well-formed
+            // looking but semantically wrong frame on the wire, and still report
+            // success - the tester would decode a positive response with its data
+            // field silently missing.
+            //
+            // Note the frame needs `payload.len() + 1`, so a handler that fills a
+            // MAX_FRAME-sized response buffer completely will land here: the
+            // response SID leaves only MAX_FRAME - 1 bytes for data.
+            return self.nrc_raw(dst, request_sid, H::Error::response_too_long().into(), now);
+        }
 
         self.enqueue(dst.clone(), frame)
+    }
+
+    /// Sends NRC 0x14 responseTooLong for a request whose response would not fit.
+    ///
+    /// Used by the handler paths that assemble a response body before handing it to
+    /// [`Self::pos`], where an over-long handler result would otherwise be lost
+    /// before `pos` ever sees it.
+    fn nrc_too_long(
+        &mut self,
+        dst: &NodeAddress,
+        request_sid: u8,
+        now: Instant,
+    ) -> Result<(), ServerError<H::Error>> {
+        self.nrc_raw(dst, request_sid, H::Error::response_too_long().into(), now)
     }
 
     fn nrc(
@@ -501,6 +586,14 @@ where
         _now: Instant,
     ) -> Result<(), ServerError<H::Error>> {
         let mut frame: Vec<u8, MAX_FRAME> = Vec::new();
+
+        // A negative response is exactly three bytes. These cannot fail for any
+        // server that can answer at all, and they deliberately do not recurse into
+        // the responseTooLong path: failing to build an NRC has no NRC to report it.
+        debug_assert!(
+            MAX_FRAME >= 3,
+            "MAX_FRAME must hold a 3-byte negative response"
+        );
         let _ = frame.push(0x7F);
         let _ = frame.push(request_sid);
         let _ = frame.push(nrc_byte);
@@ -658,15 +751,28 @@ where
                 .map_err(|_| ServerError::Handler(H::Error::conditions_not_correct()))?;
 
             self.security.pending_seed.clear();
-            let _ = self
+            // A truncated stored seed would make the later SendKey comparison run
+            // against the wrong seed, so a legitimate unlock would fail with no
+            // indication why.
+            if self
                 .security
                 .pending_seed
-                .extend_from_slice(&seed_buf[..seed_len]);
+                .extend_from_slice(&seed_buf[..seed_len])
+                .is_err()
+            {
+                self.security.pending_seed.clear();
+                return self.nrc_too_long(src, 0x27, now);
+            }
             self.security.pending_level = level;
 
             let mut payload: Vec<u8, MAX_SEED> = Vec::new();
-            let _ = payload.push(level);
-            let _ = payload.extend_from_slice(&seed_buf[..seed_len]);
+            if payload.push(level).is_err()
+                || payload.extend_from_slice(&seed_buf[..seed_len]).is_err()
+            {
+                self.security.pending_seed.clear();
+                self.security.pending_level = 0;
+                return self.nrc_too_long(src, 0x27, now);
+            }
             self.pos(src, 0x27, &payload, now)
         } else {
             // SendKey - key bytes are the payload after the sub-function byte.
@@ -701,11 +807,25 @@ where
                     self.pos(src, 0x27, &[access_type], now)
                 }
                 Err(_) => {
-                    self.security.increment_failed(level);
+                    // Fail closed. If the failed attempt cannot be recorded then the
+                    // attempt limit cannot be enforced, and proceeding would grant
+                    // this level unlimited key guesses. Deny instead of allowing an
+                    // unbounded retry window.
+                    if self.security.increment_failed(level).is_err() {
+                        return self.nrc(src, 0x27, H::Error::conditions_not_correct(), now);
+                    }
+
                     if self.security.failed_count(level) >= max_attempts {
-                        self.security.set_lockout(level, now + lockout_dur);
+                        // Likewise: an unrecorded lockout is never enforced, so a
+                        // failure here must deny rather than report a lockout that
+                        // does not exist.
+                        if self.security.set_lockout(level, now + lockout_dur).is_err() {
+                            return self.nrc(src, 0x27, H::Error::conditions_not_correct(), now);
+                        }
+
                         return self.nrc(src, 0x27, H::Error::exceeded_number_of_attempts(), now);
                     }
+
                     self.nrc(src, 0x27, H::Error::invalid_key(), now)
                 }
             }
@@ -747,15 +867,18 @@ where
                 return self.nrc_raw(src, 0x22, nrc, now);
             }
 
-            let _ = resp.push(chunk[0]);
-            let _ = resp.push(chunk[1]);
+            if resp.push(chunk[0]).is_err() || resp.push(chunk[1]).is_err() {
+                return self.nrc_too_long(src, 0x22, now);
+            }
 
             let mut data_buf = [0u8; MAX_FRAME];
             let len = self
                 .handler
                 .read_did(did, &mut data_buf)
                 .map_err(ServerError::Handler)?;
-            let _ = resp.extend_from_slice(&data_buf[..len]);
+            if resp.extend_from_slice(&data_buf[..len]).is_err() {
+                return self.nrc_too_long(src, 0x22, now);
+            }
         }
 
         self.pos(src, 0x22, &resp, now)
@@ -849,7 +972,16 @@ where
                         .map(|d| requested_interval.max(d.min_periodic_interval))
                         .unwrap_or(requested_interval);
 
-                    self.periodic.register(did, effective, src.clone(), now);
+                    // Refuse rather than confirm a subscription that was not stored:
+                    // a positive response here would promise periodic data the server
+                    // has no record of and will never send.
+                    if self
+                        .periodic
+                        .register(did, effective, src.clone(), now)
+                        .is_err()
+                    {
+                        return self.nrc(src, 0x2A, H::Error::request_out_of_range(), now);
+                    }
                 }
 
                 self.pos(src, 0x2A, &[mode], now)
@@ -892,10 +1024,13 @@ where
         }
 
         let mut resp: Vec<u8, MAX_FRAME> = Vec::new();
-        let _ = resp.push(sub_function);
-        let _ = resp.push(payload[1]);
-        let _ = resp.push(payload[2]);
-        let _ = resp.extend_from_slice(&buf[..len]);
+        if resp.push(sub_function).is_err()
+            || resp.push(payload[1]).is_err()
+            || resp.push(payload[2]).is_err()
+            || resp.extend_from_slice(&buf[..len]).is_err()
+        {
+            return self.nrc_too_long(src, 0x31, now);
+        }
         self.pos(src, 0x31, &resp, now)
     }
 
@@ -958,9 +1093,12 @@ where
             .map_err(ServerError::Handler)?;
 
         let mut resp: Vec<u8, MAX_FRAME> = Vec::new();
-        let _ = resp.push(payload[0]);
-        let _ = resp.push(payload[1]);
-        let _ = resp.extend_from_slice(&buf[..len]);
+        if resp.push(payload[0]).is_err()
+            || resp.push(payload[1]).is_err()
+            || resp.extend_from_slice(&buf[..len]).is_err()
+        {
+            return self.nrc_too_long(src, 0x2F, now);
+        }
         self.pos(src, 0x2F, &resp, now)
     }
 
@@ -1036,8 +1174,9 @@ where
             .map_err(ServerError::Handler)?;
 
         let mut resp: Vec<u8, MAX_FRAME> = Vec::new();
-        let _ = resp.push(block_seq);
-        let _ = resp.extend_from_slice(&buf[..len]);
+        if resp.push(block_seq).is_err() || resp.extend_from_slice(&buf[..len]).is_err() {
+            return self.nrc_too_long(src, 0x36, now);
+        }
         self.pos(src, 0x36, &resp, now)
     }
 
@@ -1108,8 +1247,10 @@ where
             // [periodic_data_identifier (1 byte), data_record (n bytes)]
             let did_low = (*did & 0xFF) as u8;
             let mut frame = Vec::new();
-            let _ = frame.push(did_low);
-            let _ = frame.extend_from_slice(&data_buf[..len]);
+            // Unsolicited, so there is no request to answer with NRC 0x14.
+            if frame.push(did_low).is_err() || frame.extend_from_slice(&data_buf[..len]).is_err() {
+                return Err(ServerError::ResponseTooLong);
+            }
 
             self.enqueue(client.clone(), frame)?;
             self.periodic.advance(*did, client, now);

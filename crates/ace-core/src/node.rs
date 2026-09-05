@@ -49,12 +49,17 @@ pub trait DiagnosticNode<const MAX_FRAME: usize, const MAX_OUTBOX: usize> {
 
     /// Drains all pending outbound messages from the node's outbox.
     ///
-    /// Returns the number drained into `out` as `(dst, data)` pairs. Callers
-    /// should invoke this after every `handle` and `tick` to collect output.
+    /// Returns the number moved into `out` as `(dst, data)` pairs. Callers should
+    /// invoke this after every `handle` and `tick` to collect output.
+    ///
+    /// All-or-nothing: if `out` cannot hold everything queued, nothing is moved and
+    /// `Err` is returned, so the caller can retry with a larger buffer. Reporting a
+    /// count while quietly dropping the excess would leave the caller believing
+    /// messages were delivered that never left the node.
     fn drain_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
-    ) -> usize;
+    ) -> Result<usize, crate::storage::CapacityError>;
 }
 
 // endregion: DiagnosticNode Trait

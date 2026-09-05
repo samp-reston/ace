@@ -31,7 +31,7 @@ use ace_gateway::tester::{DoipConnection, DoipConnectionConfig, DoipTesterEvent}
 const MAX_TARGETS: usize = 4;
 const TCP_MAX_FRAME: usize = 256;
 const TCP_MAX_OUTBOX: usize = 8;
-const MAX_CONNECTION_EVENTS: usize = 16;
+const MAX_CONNECTION_ACTIONS: usize = 16;
 const PENDING: usize = 4;
 const SIM_MAX_FRAME: usize = 256;
 const SIM_MAX_OUTBOX: usize = 8;
@@ -43,7 +43,7 @@ type Connection = DoipConnection<
     MAX_TARGETS,
     TCP_MAX_FRAME,
     TCP_MAX_OUTBOX,
-    MAX_CONNECTION_EVENTS,
+    MAX_CONNECTION_ACTIONS,
     PENDING,
     SIM_MAX_FRAME,
     SIM_MAX_OUTBOX,
@@ -201,7 +201,7 @@ fn dsc_learned_p2_is_applied_to_the_live_client() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(DEFAULT_P2_MS + 50).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         !saw_timeout(&mut conn),
         "request timed out at the OLD default P2 ({DEFAULT_P2_MS}ms) - the DSC-learned P2 \
@@ -215,7 +215,7 @@ fn dsc_learned_p2_is_applied_to_the_live_client() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(u64::from(DSC_P2_MS) + 100).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         saw_timeout(&mut conn),
         "request never timed out even after exceeding the DSC-learned P2 ({DSC_P2_MS}ms) - \
@@ -262,7 +262,7 @@ fn dsc_p2_star_ten_millisecond_unit_conversion_is_applied() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(DSC_P2EXT_10MS_UNITS as u64 + 50).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         !saw_timeout(&mut conn),
         "request timed out at the UNCONVERTED P2* ({DSC_P2EXT_10MS_UNITS}ms) - the ×10 \
@@ -274,7 +274,7 @@ fn dsc_p2_star_ten_millisecond_unit_conversion_is_applied() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(DSC_P2EXT_EXPECTED_MS).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         saw_timeout(&mut conn),
         "request never timed out even after exceeding the correctly-converted P2* \

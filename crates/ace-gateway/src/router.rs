@@ -51,6 +51,13 @@ impl<const MAX_PENDING: usize> PendingRouteTable<MAX_PENDING> {
             return false;
         }
 
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.entries.is_full(),
+            "more entries configured than MAX_ROUTES allows"
+        );
         let _ = self.entries.push(route);
         true
     }

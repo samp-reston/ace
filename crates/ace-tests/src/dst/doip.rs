@@ -40,7 +40,7 @@ const MAX_GATEWAYS: usize = 8;
 const ISOTP_MAX_NODES: usize = 8;
 const MAX_TESTERS: usize = 2;
 const MAX_FRAME: usize = 256;
-const MAX_CONNECTION_EVENTS: usize = 16;
+const MAX_CONNECTION_ACTIONS: usize = 16;
 const MAX_ACTIVATION_TYPES: usize = 16;
 const UDS_MAX_FRAME: usize = 256;
 const UDS_MAX_OUTBOX: usize = 16;
@@ -71,7 +71,7 @@ type MyDoipDstScenario = DoipDstScenario<
     ISOTP_MAX_NODES,
     MAX_TESTERS,
     MAX_FRAME,
-    MAX_CONNECTION_EVENTS,
+    MAX_CONNECTION_ACTIONS,
     MAX_ACTIVATION_TYPES,
     UDS_MAX_FRAME,
     UDS_MAX_OUTBOX,
@@ -295,13 +295,15 @@ fn p5_full_stack_light_faults() {
                 t3_counter += 1;
                 if t3_counter >= T3_TICKS {
                     let now = s.tcp_bus.now();
-                    s.tester.on_tcp_event(
-                        &LinkEvent::ConnectionEstablished {
-                            from: s.tester.address().clone(),
-                            to: gw_addr.clone(),
-                        },
-                        now,
-                    );
+                    s.tester
+                        .on_tcp_event(
+                            &LinkEvent::ConnectionEstablished {
+                                from: s.tester.address().clone(),
+                                to: gw_addr.clone(),
+                            },
+                            now,
+                        )
+                        .expect("link event must be accepted");
                     t3_counter = 0;
                 }
             } else {

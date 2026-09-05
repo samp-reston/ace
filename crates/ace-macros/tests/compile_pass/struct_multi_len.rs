@@ -1,19 +1,19 @@
 extern crate ace_macros;
 
-use ace_core::DiagError;
+use ace_core::CodecError;
 use ace_macros::FrameCodec;
 
 #[derive(Debug)]
 pub struct TestError;
-impl From<TestError> for DiagError {
+impl From<TestError> for CodecError {
     fn from(_: TestError) -> Self {
-        // was: _: DiagError
-        DiagError::InvalidFrame(heapless::String::new())
+        // was: _: CodecError
+        CodecError::InvalidFrame(heapless::String::new())
     }
 }
 
-impl From<DiagError> for TestError {
-    fn from(_: DiagError) -> Self {
+impl From<CodecError> for TestError {
+    fn from(_: CodecError) -> Self {
         TestError
     }
 }

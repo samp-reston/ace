@@ -16,6 +16,7 @@ use ace_can::{
     IsoTpAddressingMode, ReassembleResult, Reassembler, ReassemblerConfig, SegmentResult,
     Segmenter, SegmenterConfig,
 };
+use ace_core::storage::CapacityError;
 use ace_core::{FrameWrite, Vec};
 use ace_core::{clock::Instant, io::NodeAddress};
 use ace_doip::{
@@ -26,7 +27,7 @@ use ace_doip::{
         AliveCheckRequest, AliveCheckResponse, DiagnosticAckCode, DiagnosticMessageAck,
         DiagnosticMessageNack, DiagnosticNackCode, GenericNack, NackCode,
     },
-    session::{ActivationAuthProvider, ActivationStateMachine, ConnectionEvent, ConnectionState},
+    session::{ActivationAuthProvider, ActivationStateMachine, ConnectionAction, ConnectionState},
 };
 use ace_proto::DoipFrame;
 
@@ -78,6 +79,21 @@ pub enum GatewayError {
     /// No connection slot available for a new tester.
     NoConnectionSlot,
 
+    /// An assembled frame exceeded its bounded buffer. Distinct from `Codec`, which
+    /// is a wire-format failure: this one says the buffer is too small.
+    FrameTooLong,
+
+    /// The per-connection DoIP state machine reported a failure.
+    ///
+    /// Wrapped rather than flattened: the gateway drives `ConnectionState` and a
+    /// caller needs to tell a connection-level fault from a gateway-level one.
+    Doip(ace_doip::error::DoipError),
+
+    /// The bounded action buffer could not hold everything drained from a
+    /// connection. Reported rather than truncated: dropping a pending action would
+    /// desynchronise the gateway from the connection state machine.
+    ActionBufferOverflow,
+
     /// ISO-TP Error
     IsoTpError(ace_can::IsoTpError),
 
@@ -122,7 +138,7 @@ impl<const ISOTP_MAX_FRAME: usize> EcuIsoTpNode<ISOTP_MAX_FRAME> {
 struct ConnectionSlot<
     // region: ConnectionState Constants
     const UDS_MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_TESTERS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     // endregion: ConnectionState Constants
@@ -130,8 +146,13 @@ struct ConnectionSlot<
 > {
     /// The logical address of the connected tester - `None` if slot is free.
     tester_address: Option<u16>,
-    state:
-        ConnectionState<UDS_MAX_FRAME, MAX_CONNECTION_EVENTS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>,
+    state: ConnectionState<
+        UDS_MAX_FRAME,
+        MAX_CONNECTION_ACTIONS,
+        MAX_TESTERS,
+        MAX_ACTIVATION_TYPES,
+        A,
+    >,
 }
 
 // endregion: ConnectionSlot
@@ -147,7 +168,7 @@ pub struct DoipGateway<
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
     const UDS_MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const MAX_NODES: usize,
     A,
@@ -171,7 +192,7 @@ pub struct DoipGateway<
 
     /// Active tester connection slots.
     connections: Vec<
-        ConnectionSlot<UDS_MAX_FRAME, MAX_CONNECTION_EVENTS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>,
+        ConnectionSlot<UDS_MAX_FRAME, MAX_CONNECTION_ACTIONS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>,
         MAX_TESTERS,
     >,
 }
@@ -185,7 +206,7 @@ impl<
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
     const UDS_MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const MAX_NODES: usize,
     A,
@@ -199,7 +220,7 @@ impl<
         MAX_TESTERS,
         MAX_FRAME,
         UDS_MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         MAX_NODES,
         A,
@@ -275,8 +296,9 @@ where
         if let Some(idx) = slot_idx {
             self.connections[idx]
                 .state
-                .handle(&payload_type, payload_data, now);
-            self.process_connection_events(idx, src, now)?;
+                .handle(&payload_type, payload_data, now)
+                .map_err(GatewayError::Doip)?;
+            self.process_connection_actions(idx, src, now)?;
         }
 
         Ok(())
@@ -315,13 +337,13 @@ where
                         SegmentResult::WaitForFlowControl => break,
                         SegmentResult::Frame { len } => {
                             let mut frame: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                            let _ = frame.extend_from_slice(&out_buf[..len]);
+                            frame
+                                .extend_from_slice(&out_buf[..len])
+                                .map_err(|_| GatewayError::FrameTooLong)?;
 
-                            if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                                return Err(GatewayError::CanOutboxFull);
-                            } else {
-                                self.can_outbox.push((NodeAddress(request_can_id), frame));
-                            }
+                            self.can_outbox
+                                .push((NodeAddress(request_can_id), frame))
+                                .map_err(|_| GatewayError::CanOutboxFull)?;
                         }
                     }
                 }
@@ -357,7 +379,8 @@ where
                     if let Some(uds_bytes) = isotp.resp_reassembler.message(len) {
                         if let Some(route) = self.routes.take_by_can_response_id(response_can_id) {
                             let mut buf: Vec<u8, UDS_MAX_FRAME> = Vec::new();
-                            let _ = buf.extend_from_slice(&uds_bytes[..len.min(UDS_MAX_FRAME)]);
+                            buf.extend_from_slice(&uds_bytes[..len])
+                                .map_err(|_| GatewayError::FrameTooLong)?;
 
                             pending = Some((
                                 NodeAddress(route.tester_address as u32),
@@ -370,7 +393,8 @@ where
                 }
                 ReassembleResult::FlowControl { frame, len: fc_len } => {
                     let mut fc: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                    let _ = fc.extend_from_slice(&frame[..fc_len]);
+                    fc.extend_from_slice(&frame[..fc_len])
+                        .map_err(|_| GatewayError::FrameTooLong)?;
 
                     fc_frame = Some(fc);
                 }
@@ -379,7 +403,8 @@ where
                     fc_len,
                 } => {
                     let mut fc: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                    let _ = fc.extend_from_slice(&flow_control[..fc_len]);
+                    fc.extend_from_slice(&flow_control[..fc_len])
+                        .map_err(|_| GatewayError::FrameTooLong)?;
 
                     fc_frame = Some(fc);
                     isotp.resp_reassembler.reset();
@@ -389,11 +414,9 @@ where
         }
 
         if let Some(fc) = fc_frame {
-            if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                return Err(GatewayError::CanOutboxFull);
-            }
-
-            let _ = self.can_outbox.push((NodeAddress(response_can_id), fc));
+            self.can_outbox
+                .push((NodeAddress(response_can_id), fc))
+                .map_err(|_| GatewayError::CanOutboxFull)?;
         }
 
         if let Some((dst, source, target, data)) = pending {
@@ -405,18 +428,22 @@ where
 
     pub fn tick(&mut self, now: Instant) -> Result<(), GatewayError> {
         for idx in 0..self.connections.len() {
-            self.connections[idx].state.tick(now);
+            self.connections[idx]
+                .state
+                .tick(now)
+                .map_err(GatewayError::Doip)?;
 
-            let events: Vec<ConnectionEvent<UDS_MAX_FRAME>, MAX_CONNECTION_EVENTS> =
-                self.connections[idx].state.drain_events().collect();
+            let actions: Vec<ConnectionAction<UDS_MAX_FRAME>, MAX_CONNECTION_ACTIONS> =
+                Vec::from_iter_checked(self.connections[idx].state.drain_actions())
+                    .map_err(|_| GatewayError::ActionBufferOverflow)?;
 
             let tester_addr = self.connections[idx]
                 .tester_address
                 .map(|a| NodeAddress(a as u32))
                 .unwrap_or(NodeAddress(0));
 
-            for event in events {
-                self.handle_connection_event(idx, &tester_addr, event)?;
+            for action in actions {
+                self.handle_connection_action(idx, &tester_addr, action)?;
             }
         }
 
@@ -427,28 +454,42 @@ where
     pub fn drain_tcp_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.tcp_outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.tcp_outbox.len();
 
         for item in self.tcp_outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     /// Drains outbound UDS frames for the CAN bus.
     pub fn drain_can_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.can_outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.can_outbox.len();
 
         for item in self.can_outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     // endregion: SimNode surface
@@ -514,34 +555,35 @@ where
 
     // region: Event Processing
 
-    fn process_connection_events(
+    fn process_connection_actions(
         &mut self,
         slot_idx: usize,
         tester: &NodeAddress,
         _now: Instant,
     ) -> Result<(), GatewayError> {
-        let events: Vec<ConnectionEvent<UDS_MAX_FRAME>, MAX_CONNECTION_EVENTS> =
-            self.connections[slot_idx].state.drain_events().collect();
+        let actions: Vec<ConnectionAction<UDS_MAX_FRAME>, MAX_CONNECTION_ACTIONS> =
+            Vec::from_iter_checked(self.connections[slot_idx].state.drain_actions())
+                .map_err(|_| GatewayError::ActionBufferOverflow)?;
 
-        for event in events {
-            self.handle_connection_event(slot_idx, tester, event)?;
+        for action in actions {
+            self.handle_connection_action(slot_idx, tester, action)?;
         }
 
         Ok(())
     }
 
-    fn handle_connection_event(
+    fn handle_connection_action(
         &mut self,
         slot_idx: usize,
         tester: &NodeAddress,
-        event: ConnectionEvent<UDS_MAX_FRAME>,
+        action: ConnectionAction<UDS_MAX_FRAME>,
     ) -> Result<(), GatewayError> {
-        match event {
-            ConnectionEvent::SendActivationResponse(resp) => {
+        match action {
+            ConnectionAction::SendActivationResponse(resp) => {
                 self.encode_and_send_tcp(tester, PayloadType::RoutingActivationResponse, &resp)?;
             }
 
-            ConnectionEvent::SendDiagnosticAck {
+            ConnectionAction::SendDiagnosticAck {
                 source_address,
                 target_address,
             } => {
@@ -554,7 +596,7 @@ where
                 self.encode_and_send_tcp(tester, PayloadType::DiagnosticMessageAck, &ack)?;
             }
 
-            ConnectionEvent::SendDiagnosticNack {
+            ConnectionAction::SendDiagnosticNack {
                 source_address,
                 target_address,
                 nack_code,
@@ -567,7 +609,7 @@ where
                 self.encode_and_send_tcp(tester, PayloadType::DiagnosticMessageNack, &ack)?;
             }
 
-            ConnectionEvent::ForwardToEcu {
+            ConnectionAction::ForwardToEcu {
                 source_address,
                 target_address,
                 uds_data,
@@ -624,25 +666,25 @@ where
                         SegmentResult::WaitForFlowControl => break,
                         SegmentResult::Frame { len } => {
                             let mut frame: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                            let _ = frame.extend_from_slice(&out_buf[..len]);
+                            frame
+                                .extend_from_slice(&out_buf[..len])
+                                .map_err(|_| GatewayError::FrameTooLong)?;
 
-                            if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                                return Err(GatewayError::CanOutboxFull);
-                            }
-
-                            let _ = self.can_outbox.push((NodeAddress(request_can_id), frame));
+                            self.can_outbox
+                                .push((NodeAddress(request_can_id), frame))
+                                .map_err(|_| GatewayError::CanOutboxFull)?;
                         }
                     }
                 }
             }
 
-            ConnectionEvent::SendAliveCheckRequest => {
+            ConnectionAction::SendAliveCheckRequest => {
                 let req = AliveCheckRequest {};
 
                 self.encode_and_send_tcp(tester, PayloadType::AliveCheckRequest, &req)?;
             }
 
-            ConnectionEvent::SendAliveCheckResponse => {
+            ConnectionAction::SendAliveCheckResponse => {
                 let tester_address = self.connections[slot_idx].tester_address.unwrap_or(0);
 
                 let resp = AliveCheckResponse {
@@ -652,7 +694,7 @@ where
                 self.encode_and_send_tcp(tester, PayloadType::AliveCheckResponse, &resp)?;
             }
 
-            ConnectionEvent::Close => {
+            ConnectionAction::Close => {
                 let tester_address = self.connections[slot_idx].tester_address.unwrap_or(0);
 
                 self.remove_slot(tester_address);
@@ -701,21 +743,17 @@ where
 
         let mut frame: Vec<u8, TCP_MAX_FRAME> = Vec::new();
 
-        if frame.len() + header_len > TCP_MAX_FRAME {
-            return Err(GatewayError::Codec);
-        }
-        frame.extend_from_slice(&header_staging[..header_len]);
+        frame
+            .extend_from_slice(&header_staging[..header_len])
+            .map_err(|_| GatewayError::Codec)?;
 
-        if frame.len() + payload_len > TCP_MAX_FRAME {
-            return Err(GatewayError::Codec);
-        }
-        frame.extend_from_slice(&payload_staging[..payload_len]);
+        frame
+            .extend_from_slice(&payload_staging[..payload_len])
+            .map_err(|_| GatewayError::Codec)?;
 
-        if self.tcp_outbox.len() >= TCP_MAX_OUTBOX {
-            return Err(GatewayError::TcpOutboxFull);
-        }
-
-        let _ = self.tcp_outbox.push((dst.clone(), frame));
+        self.tcp_outbox
+            .push((dst.clone(), frame))
+            .map_err(|_| GatewayError::TcpOutboxFull)?;
 
         Ok(())
     }
@@ -742,16 +780,23 @@ where
             let mut slice: &mut [u8] = &mut header_staging;
             header.encode(&mut slice).map_err(|_| GatewayError::Codec)?;
             let written = 8 - slice.len();
-            let _ = frame.extend_from_slice(&header_staging[..written]);
+            frame
+                .extend_from_slice(&header_staging[..written])
+                .map_err(|_| GatewayError::FrameTooLong)?;
         }
-        let _ = frame.extend_from_slice(&source_address.to_be_bytes());
-        let _ = frame.extend_from_slice(&target_address.to_be_bytes());
-        let _ = frame.extend_from_slice(uds_data);
+        frame
+            .extend_from_slice(&source_address.to_be_bytes())
+            .map_err(|_| GatewayError::FrameTooLong)?;
+        frame
+            .extend_from_slice(&target_address.to_be_bytes())
+            .map_err(|_| GatewayError::FrameTooLong)?;
+        frame
+            .extend_from_slice(uds_data)
+            .map_err(|_| GatewayError::Codec)?;
 
-        if self.tcp_outbox.len() >= TCP_MAX_OUTBOX {
-            return Err(GatewayError::TcpOutboxFull);
-        }
-        let _ = self.tcp_outbox.push((dst.clone(), frame));
+        self.tcp_outbox
+            .push((dst.clone(), frame))
+            .map_err(|_| GatewayError::TcpOutboxFull)?;
 
         Ok(())
     }

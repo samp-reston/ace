@@ -1,6 +1,6 @@
 // region: DoipError
 
-use ace_core::DiagError;
+use ace_core::CodecError;
 use ace_uds::UdsError;
 use heapless::format;
 
@@ -45,17 +45,25 @@ pub enum DoipValidationError {
 
 #[derive(Debug)]
 pub enum DoipError {
-    /// Underlying transport or framing error
-    Transport(DiagError),
+    /// Frame could not be encoded or decoded
+    Codec(CodecError),
     /// Frame structure violated ISO 13400-2 constraints
     Validation(DoipValidationError),
     /// Frame was structurally valid but could not be parsed
     Parse(heapless::String<64>),
+
+    /// The pending-action queue is full, so a required action could not be recorded.
+    ///
+    /// Distinct from a codec or validation failure: the frame was fine, but the
+    /// connection cannot express what must happen next. Dropping the action instead
+    /// would desynchronise the caller from the state machine - a lost `Close` leaves
+    /// the connection open, a lost `SendDiagnosticNack` leaves the tester waiting.
+    ActionQueueFull,
 }
 
-impl From<DiagError> for DoipError {
-    fn from(e: DiagError) -> Self {
-        DoipError::Transport(e)
+impl From<CodecError> for DoipError {
+    fn from(e: CodecError) -> Self {
+        DoipError::Codec(e)
     }
 }
 
@@ -71,7 +79,7 @@ impl From<UdsError> for DoipError {
     }
 }
 
-// DoipError does NOT implement Into<DiagError> - the two error domains are
-// parallel. DiagError is transport-layer, DoipError is protocol-layer.
+// DoipError does NOT implement Into<CodecError> - the two error domains are
+// parallel. CodecError is transport-layer, DoipError is protocol-layer.
 
 // endregion: DoipError

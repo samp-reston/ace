@@ -85,7 +85,7 @@ where
     fn drain_outbox(
         &mut self,
         out: &mut Vec<(ace_core::io::NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, ace_core::storage::CapacityError> {
         UdsServer::drain_outbox(self, out)
     }
 }

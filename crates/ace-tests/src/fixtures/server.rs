@@ -31,10 +31,14 @@ impl TestHandler {
     pub fn set_did(&mut self, id: u16, data: &[u8]) {
         if let Some(entry) = self.dids.iter_mut().find(|(d, _)| *d == id) {
             entry.1.clear();
-            let _ = entry.1.extend_from_slice(&data[..data.len().min(64)]);
+            entry
+                .1
+                .extend_from_slice(data)
+                .expect("DID value exceeds the fixture buffer");
         } else {
             let mut buf: Vec<u8, 64> = Vec::new();
-            let _ = buf.extend_from_slice(&data[..data.len().min(64)]);
+            buf.extend_from_slice(data)
+                .expect("DID value exceeds the fixture buffer");
 
             let _ = self.dids.push((id, buf));
         }
@@ -65,7 +69,10 @@ impl ServerHandler for TestHandler {
     fn write_did(&mut self, did: u16, data: &[u8]) -> Result<(), Self::Error> {
         if let Some(entry) = self.dids.iter_mut().find(|(d, _)| *d == did) {
             entry.1.clear();
-            let _ = entry.1.extend_from_slice(&data[..data.len().min(64)]);
+            entry
+                .1
+                .extend_from_slice(data)
+                .map_err(|_| BuiltinNrc::RequestOutOfRange)?;
 
             Ok(())
         } else {
