@@ -14,7 +14,11 @@ trybuild = { version = "1.0.116" }
 proptest = { version = "1.10.0" }
 serde = { version = "1.0.228" }
 tokio-util = { version = "0.7.18" }
-derive_more = { version = "2.1.1" }
+# default-features = false is required: derive_more's defaults enable `std`, and
+# it does not declare `#![no_std]`, so leaving them on makes every dependent
+# crate unbuildable for a bare-metal target. Consumers opt into the derives they
+# need, and wire `derive_more/std` from their own `std` feature.
+derive_more = { version = "2.1.1", default-features = false }
 
 aced = { package = "ace-api", path = "crates/ace-api", version = "0.5.5" }
 ace-core = { path = "crates/ace-core", version = "0.5.5" }

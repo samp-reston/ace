@@ -455,11 +455,17 @@ where
     ) -> Result<(), ServerError<H::Error>> {
         if self.outbox.len() >= MAX_OUTBOX {
             return Err(ServerError::OutboxFull);
-        } else {
-            self.outbox.push((dst, frame));
-
-            Ok(())
         }
+
+        // The capacity check above guarantees room, so this push cannot fail.
+        // The discard is deliberate rather than a dropped error: `ace_core::Vec`
+        // returns `Result` from `push` when backed by `heapless` and `()` when
+        // backed by `alloc`, so no single expression consumes the value in both
+        // configurations. The guard is what makes this correct. Phase 3 gives
+        // storage a uniform push contract and removes the need for it.
+        let _ = self.outbox.push((dst, frame));
+
+        Ok(())
     }
 
     fn pos(

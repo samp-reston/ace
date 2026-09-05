@@ -6,7 +6,7 @@ A `no_std`-first Rust workspace for automotive diagnostic communication. Impleme
 
 ## Design principles
 
-**`no_std` by default.** Every protocol crate compiles on bare-metal targets with no heap allocator. `alloc` and `std` are opt-in features. All buffers are statically sized via const generics.
+**`no_std` by default.** Every protocol crate compiles on bare-metal targets with no heap allocator. `alloc` and `std` are opt-in features. All buffers are statically sized via const generics. This is verified by building each crate for `thumbv7em-none-eabihf` with default features off — a host build with `--no-default-features` does not prove it, because the host still has `std` available for a dependency to reach.
 
 **Zero-copy.** Frame parsing operates on borrowed byte slices. No allocation occurs in the decode path. Payload references carry the lifetime of the original receive buffer.
 
@@ -20,19 +20,26 @@ A `no_std`-first Rust workspace for automotive diagnostic communication. Impleme
 
 ```
 ace/
+├── ace-api         - Batteries-included facade (alloc-enabled; not for embedded)
 ├── ace-can         - ISO-TP reassembler and segmenter (ISO 15765-2)
 ├── ace-client      - UDS tester client state machine
-├── ace-core        - Codec traits, error types, primitive impls
+├── ace-core        - Foundation: codec traits, storage, time, addressing, node
 ├── ace-doip        - DoIP typed message and session layer (ISO 13400-2)
 ├── ace-gateway     - DoIP gateway, ISO-TP bridge, DoIP tester
 ├── ace-macros      - Proc-macro derives: FrameRead, FrameWrite, FrameCodec
 ├── ace-proto       - Raw frame types: UdsFrame, DoipFrame, CAN frames
 ├── ace-server      - UDS ECU server state machine
 ├── ace-sim         - Deterministic simulation infrastructure
-└── ace-tests       - DST property tests for the full stack
+├── ace-tests       - DST property tests for the full stack
 ├── ace-transport   - Production OS transport (std, TCP/UDP)
-├── ace-uds         - UDS typed message layer (ISO 14229-1)
+└── ace-uds         - UDS typed message layer (ISO 14229-1)
 ```
+
+Not every consumer needs all of it. See
+[`docs/consumer-subsets.md`](docs/consumer-subsets.md) for the verified minimal
+dependency set per consumer — bare-metal ECU server, tester client, gateway, or
+the hosted demonstration — and for how each subset is proved against a real
+bare-metal target.
 
 ---
 
@@ -46,7 +53,21 @@ Foundation layer. Defines the three codec traits that everything else builds on:
 - `FrameWrite` - encode into a `Writer` (either `&mut [u8]` or `BytesMut`)
 - `Writer` - sealed trait abstracting alloc and no-alloc write targets
 
-Also provides `DiagError`, `AddressMode`, `DiagnosticAddress`, and the `FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
+It also owns the abstractions every consumer needs regardless of whether a
+simulator is present:
+
+- `clock` - `Instant`, `Duration`, and the `Clock` trait
+- `io` - `NodeAddress`, `RawMessage`, `LinkEvent`, `FrameTransport`, `MessageTransport`
+- `node` - `DiagnosticNode`, the interface an external scheduler (or a bare-metal
+  main loop) uses to drive one diagnostic peer
+- `rng` - the `Rng` trait
+
+Concrete implementations of those live with their consumer: `ace-sim` supplies a
+virtual clock and seeded RNG, an embedded integrator supplies a hardware timer and
+entropy source. Nothing in a production build depends on `ace-sim`.
+
+Also provides `DiagError`, `AddressMode`, `DiagnosticAddress`, and the
+`FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
 
 ```toml
 [dependencies]

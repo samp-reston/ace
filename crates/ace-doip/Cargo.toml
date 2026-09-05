@@ -20,7 +20,7 @@ alloc = [
 	"ace-macros/alloc",
 	
 ]
-std = ["alloc", "ace-core/std", "ace-proto/std"]
+std = ["alloc", "ace-core/std", "ace-proto/std", "derive_more/std"]
 tokio = ["dep:tokio-util", "alloc", "dep:bytes"]
 
 [dependencies]
