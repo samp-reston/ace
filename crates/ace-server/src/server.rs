@@ -983,6 +983,21 @@ where
             self.pos(src, 0x11, &[reset_type], now)?;
         }
 
+        // A reset returns the server to its power-on diagnostic state. Previously it
+        // reset nothing: the session, the unlocked security level and any pending seed all
+        // survived, so a tester could reset an ECU and still be in a programming session
+        // holding an unlocked level - a privilege that should not outlive the reset.
+        //
+        // Ordered after the response so the answer reflects the request that was accepted.
+        self.session.session_type = 0x01;
+        self.session.security_level = 0;
+        self.session.last_rx = now;
+        self.security.clear_pending();
+
+        // Lockouts deliberately survive. Clearing them would make a reset an escape from
+        // the attempt limit, so an attacker could reset between guesses and never be
+        // delayed - which is what the limit exists to prevent.
+
         Ok(())
     }
 
@@ -1023,6 +1038,25 @@ where
                 .security_provider
                 .generate_seed(level, &mut seed_buf)
                 .map_err(|_| ServerError::Handler(H::Error::conditions_not_correct()))?;
+
+            // `SecurityLevelConfig::seed_length` was declared and read nowhere: the server
+            // handed out whatever the provider produced. A provider returning a different
+            // length than the level declares is a contract violation, and shipping the
+            // wrong-length seed would make the tester derive a key against it and fail the
+            // unlock with nothing to explain why.
+            //
+            // Reported as conditionsNotCorrect, matching the `generate_seed` failure path
+            // above: the fault is the server's, not a malformed request.
+            if let Some(expected) = self
+                .config
+                .find_security_level(level)
+                .map(|l| l.seed_length)
+            {
+                if seed_len != expected {
+                    self.security.clear_pending();
+                    return self.nrc(src, 0x27, H::Error::conditions_not_correct(), now);
+                }
+            }
 
             self.security.pending_seed.clear();
             // A truncated stored seed would make the later SendKey comparison run
@@ -1081,6 +1115,13 @@ where
                     self.pos(src, 0x27, &[access_type], now)
                 }
                 Err(_) => {
+                    // A failed key invalidates the seed. Without this the client could
+                    // send key after key against the same seed, which is the reuse the
+                    // attempt counter exists to bound - and every retry would be measured
+                    // against a seed the server had already shown it would not accept.
+                    // ISO 14229-1 requires a fresh requestSeed after a failure.
+                    self.security.clear_pending();
+
                     // Fail closed. If the failed attempt cannot be recorded then the
                     // attempt limit cannot be enforced, and proceeding would grant
                     // this level unlimited key guesses. Deny instead of allowing an

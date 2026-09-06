@@ -223,11 +223,20 @@ fn roundtrip_with_block_size<const N: usize>(
             SegmentResult::Complete => break,
 
             SegmentResult::WaitForFlowControl => {
-                // Manually produce a raw ContinueToSend FC - no address prefix
-                let fc = [0x30u8, block_size, 0x00];
-                segmenter
-                    .handle_flow_control(&fc)
-                    .expect("handle_flow_control should not fail");
+                // Unreachable when the reassembler honours its own advertised block size:
+                // it emits the next flow control on receiving the last frame of a block,
+                // which is fed to the segmenter below *before* it is asked for another
+                // frame. Reaching here means the sender is blocked on a flow control that
+                // will never come - a permanently stalled transfer.
+                //
+                // This arm used to build the frame itself
+                // (`let fc = [0x30u8, block_size, 0x00];`) and hand it to the segmenter,
+                // which is why these tests passed while the reassembler emitted no flow
+                // control at all.
+                panic!(
+                    "segmenter is waiting for flow control the reassembler never sent \
+                     (block_size={block_size})"
+                );
             }
 
             SegmentResult::Frame { len } => {
@@ -269,6 +278,95 @@ fn rt_block_size_3() {
     let payload = b"block size three means fc after every third consecutive frame";
     let result = roundtrip_with_block_size::<64>(payload, 3, IsoTpAddressingMode::Normal);
     assert_eq!(result, payload);
+}
+
+/// The block boundary itself: flow control is due after exactly `block_size` consecutive
+/// frames, not before and not later.
+///
+/// Driven by hand-built *consecutive* frames, which is legitimate - they are the sender's
+/// job. What must not be hand-built is the flow control, because that is the output under
+/// test.
+#[test]
+fn fc_is_emitted_after_exactly_block_size_consecutive_frames() {
+    const BLOCK_SIZE: u8 = 3;
+
+    let mut reassembler: Reassembler<64> = Reassembler::new(ReassemblerConfig {
+        addressing_mode: IsoTpAddressingMode::Normal,
+        block_size: BLOCK_SIZE,
+        st_min: 0,
+    });
+
+    // First frame declaring 60 bytes. The first frame carries 6 and each consecutive frame
+    // 7, so 6 + 7*5 = 41 leaves the transfer in progress across the whole loop below and
+    // completion never competes with a block boundary.
+    let mut first = [0u8; 8];
+    first[0] = 0x10;
+    first[1] = 60;
+    match reassembler.feed(&first).expect("first frame accepted") {
+        ReassembleResult::FlowControl { frame, .. } => {
+            assert_eq!(
+                frame[1], BLOCK_SIZE,
+                "the advertised block size is what the receiver will enforce"
+            );
+        }
+        other => panic!("first frame must be answered with flow control, got {other:?}"),
+    }
+
+    // Consecutive frames, counting how many arrive between flow controls.
+    let mut since_last_fc = 0u8;
+    for sequence in 1..=5u8 {
+        let mut cf = [0u8; 8];
+        cf[0] = 0x20 | (sequence & 0x0F);
+
+        since_last_fc += 1;
+
+        match reassembler.feed(&cf).expect("consecutive frame accepted") {
+            ReassembleResult::InProgress => {
+                assert!(
+                    since_last_fc < BLOCK_SIZE,
+                    "no flow control after {since_last_fc} frames, but the block is {BLOCK_SIZE}"
+                );
+            }
+            ReassembleResult::FlowControl { frame, .. } => {
+                assert_eq!(
+                    since_last_fc, BLOCK_SIZE,
+                    "flow control arrived after {since_last_fc} frames, expected {BLOCK_SIZE}"
+                );
+                assert_eq!(frame[0] & 0xF0, 0x30, "PCI must be flow control");
+                assert_eq!(frame[0] & 0x0F, 0x00, "and continue-to-send");
+                since_last_fc = 0;
+            }
+            other => panic!("unexpected result at sequence {sequence}: {other:?}"),
+        }
+    }
+}
+
+/// A block size of zero means "send everything", so no flow control is due mid-transfer.
+#[test]
+fn block_size_zero_emits_no_further_flow_control() {
+    let mut reassembler: Reassembler<64> = Reassembler::new(ReassemblerConfig {
+        addressing_mode: IsoTpAddressingMode::Normal,
+        block_size: 0,
+        st_min: 0,
+    });
+
+    let mut first = [0u8; 8];
+    first[0] = 0x10;
+    first[1] = 40;
+    reassembler.feed(&first).expect("first frame accepted");
+
+    for sequence in 1..=4u8 {
+        let mut cf = [0u8; 8];
+        cf[0] = 0x20 | (sequence & 0x0F);
+
+        assert!(
+            matches!(
+                reassembler.feed(&cf).expect("consecutive frame accepted"),
+                ReassembleResult::InProgress
+            ),
+            "block size zero must not interrupt the sender at frame {sequence}"
+        );
+    }
 }
 
 // endregion: Flow control - block size
