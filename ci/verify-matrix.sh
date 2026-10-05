@@ -9,7 +9,7 @@ export CARGO_BUILD_JOBS="$JOBS"
 TARGET="thumbv7em-none-eabihf"
 
 cargo fmt --all --check
-cargo hack check --workspace --each-feature --no-dev-deps --locked
+cargo hack check --workspace --each-feature --locked
 cargo check --workspace --all-targets -j "$JOBS"
 cargo test --workspace --no-fail-fast -j "$JOBS"
 

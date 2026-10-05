@@ -2,7 +2,7 @@
 name = "ace-core"
 version = "0.5.5"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "Foundation layer for ACE: codec traits (FrameRead, FrameWrite, Writer), bounded storage, and the time, addressing, transport, randomness, and diagnostic-node abstractions every other ace-* crate builds on. no_std, no allocator required."
 readme = "README.md"

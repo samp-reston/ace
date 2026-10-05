@@ -2,7 +2,7 @@
 name = "ace-sim"
 version = "0.5.5"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "Deterministic simulation infrastructure. Everything needed to test protocol state machines reproducibly."
 readme = "README.md"

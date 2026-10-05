@@ -2,7 +2,7 @@
 name = "ace-tests"
 version = "0.5.5"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 publish = false
 
 # Composes the individual libraries rather than the `ace-api` facade.
