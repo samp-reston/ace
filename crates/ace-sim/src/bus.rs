@@ -11,7 +11,7 @@ use ace_core::Vec;
 // region: Envelope
 
 /// A message in-flight on the simulation bus.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Envelope<const MAX_DATA: usize> {
     pub src: NodeAddress,
     pub dst: NodeAddress,

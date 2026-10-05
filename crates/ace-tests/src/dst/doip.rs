@@ -15,13 +15,11 @@ use ace_client::event::ClientEvent;
 use ace_gateway::tester::{DoipConnectionPhase, DoipTesterEvent};
 use ace_sim::{clock::Duration, io::NodeAddress, tcp_bus::LinkEvent};
 
-use crate::{
-    fixtures::{
-        TestHandler, TestSecurityProvider,
-        doip::{
-            DoipDstScenario, DoipDstScenarioBuilder, EcuNodeConfig, GATEWAY_ADDR,
-            GatewayNodeConfig, TestActivationAuthProvider,
-        },
+use crate::fixtures::{
+    TestHandler, TestSecurityProvider,
+    doip::{
+        DoipDstScenario, DoipDstScenarioBuilder, EcuNodeConfig, GATEWAY_ADDR, GatewayNodeConfig,
+        TestActivationAuthProvider,
     },
 };
 

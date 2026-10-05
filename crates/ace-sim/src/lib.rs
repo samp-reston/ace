@@ -8,4 +8,5 @@ pub mod io;
 pub mod node;
 pub mod rng;
 pub mod tcp_bus;
+pub mod trace;
 pub mod two_tier_runner;
