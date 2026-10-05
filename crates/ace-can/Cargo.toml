@@ -2,6 +2,7 @@
 name = "ace-can"
 version = "0.5.5"
 edition = "2024"
+rust-version = "1.85"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "ISO-TP implementation. Provides the reassembler and segmenter used by an IsoTpNode to bridge DoIP UDS payloads to CAN frames."
 readme = "README.md"

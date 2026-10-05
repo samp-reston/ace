@@ -1,4 +1,4 @@
 shared-version = true
 allow-branch = ["main"]
-verify = false
-# pre-release-hook = ["cargo", "test", "--workspace"]
+verify = true
+pre-release-hook = ["sh", "ci/verify-matrix.sh"]

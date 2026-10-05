@@ -2,6 +2,7 @@
 name = "ace-client"
 version = "0.5.5"
 edition = "2024"
+rust-version = "1.85"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "UDS tester client state machine."
 readme = "README.md"

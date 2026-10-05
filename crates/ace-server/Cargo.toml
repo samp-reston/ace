@@ -2,6 +2,7 @@
 name = "ace-server"
 version = "0.5.5"
 edition = "2024"
+rust-version = "1.85"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "UDS ECU server state machine. Handles all session management security access, timing, periodic DID scheduling, and NRC construction."
 readme = "README.md"
