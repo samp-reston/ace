@@ -1,7 +1,7 @@
 // region: Imports
 
 use crate::clock::{Clock, Duration, Instant, SimClock};
-use crate::fault::FaultConfig;
+use crate::fault::{FaultConfig, ScriptedFault};
 use crate::io::NodeAddress;
 use crate::rng::{Rng, Xorshift64};
 use ace_core::Vec;
@@ -132,6 +132,17 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             return false;
         }
 
+        let scripted = self.faults.script.next();
+        let (extra_delay, duplicate, replacement) = match scripted {
+            Some(ScriptedFault::DropNext) => return false,
+            Some(ScriptedFault::DelayNext(delay)) => (delay, false, None),
+            Some(ScriptedFault::DuplicateNext) => (Duration::ZERO, true, None),
+            Some(ScriptedFault::ReplaceByte { offset, value }) => {
+                (Duration::ZERO, false, Some((usize::from(offset), value)))
+            }
+            None => (Duration::ZERO, false, None),
+        };
+
         let mut payload = Vec::new();
 
         for &byte in data {
@@ -149,14 +160,20 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             }
         }
 
+        if let Some((offset, value)) = replacement {
+            if let Some(byte) = payload.get_mut(offset) {
+                *byte = value;
+            }
+        }
+
         let deliver_at = if self
             .rng
             .chance(self.faults.message_delay.0, self.faults.message_delay.1)
         {
             let delay_us = self.rng.next_u64() % self.faults.max_delay.as_micros().max(1);
-            self.clock.now() + min_latency + Duration::from_micros(delay_us)
+            self.clock.now() + min_latency + extra_delay + Duration::from_micros(delay_us)
         } else {
-            self.clock.now() + min_latency
+            self.clock.now() + min_latency + extra_delay
         };
 
         let envelope = Envelope {
@@ -166,11 +183,15 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             deliver_at,
         };
 
-        if self.queue.len() >= MAX_QUEUED {
+        let copies = if duplicate { 2 } else { 1 };
+        if copies > MAX_QUEUED.saturating_sub(self.queue.len()) {
             return false;
         }
 
-        let _ = self.queue.push(envelope);
+        let _ = self.queue.push(envelope.clone());
+        if duplicate {
+            let _ = self.queue.push(envelope);
+        }
 
         true
     }

@@ -428,6 +428,7 @@ fn p4_activation_line_drop_produces_connection_reset() {
             max_delay: Duration::ZERO,
             corruption: (0, 1),
             timeout: (0, 1),
+            script: ace_sim::fault::FaultPlan::new(),
         });
 
     s.disconnect(s.tester.address().clone(), NodeAddress(GATEWAY_ADDR as u32));
