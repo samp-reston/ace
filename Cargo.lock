@@ -118,8 +118,15 @@ dependencies = [
 name = "ace-tests"
 version = "0.5.5"
 dependencies = [
- "ace-api",
+ "ace-can",
+ "ace-client",
+ "ace-core",
+ "ace-doip",
+ "ace-gateway",
+ "ace-server",
+ "ace-sim",
  "heapless",
+ "proptest",
 ]
 
 [[package]]

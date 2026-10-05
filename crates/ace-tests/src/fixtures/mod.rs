@@ -10,5 +10,6 @@ pub mod client;
 pub mod server;
 
 pub mod doip;
+pub mod two_tier_adapters;
 
 pub use server::{TestHandler, TestSecurityProvider};

@@ -11,9 +11,9 @@
 
 // region: Imports
 
-use aced::client::event::ClientEvent;
-use aced::gateway::tester::{DoipConnectionPhase, DoipTesterEvent};
-use aced::sim::{clock::Duration, io::NodeAddress, tcp_bus::LinkEvent};
+use ace_client::event::ClientEvent;
+use ace_gateway::tester::{DoipConnectionPhase, DoipTesterEvent};
+use ace_sim::{clock::Duration, io::NodeAddress, tcp_bus::LinkEvent};
 
 use crate::{
     fixtures::{
@@ -23,7 +23,6 @@ use crate::{
             GatewayNodeConfig, TestActivationAuthProvider,
         },
     },
-    harness::TESTER_ADDR,
 };
 
 // endregion: Imports
@@ -351,7 +350,7 @@ fn p8_two_gateways_each_activate_independently() {
     s.tick_n(80);
 
     assert_eq!(
-        s.tcp_bus.connection_count(),
+        s.runner.outer_bus().connection_count(),
         2,
         "the bus must hold one connection per gateway"
     );
@@ -421,9 +420,10 @@ fn p4_activation_line_drop_produces_connection_reset() {
     s.tick_n(50);
     assert!(s.is_activated());
 
-    s.tcp_bus
+    s.runner
+        .outer_bus()
         .inner_mut()
-        .set_faults(aced::sim::fault::FaultConfig {
+        .set_faults(ace_sim::fault::FaultConfig {
             message_loss: (0, 1),
             message_reorder: (0, 1),
             message_delay: (0, 1),
@@ -432,7 +432,7 @@ fn p4_activation_line_drop_produces_connection_reset() {
             timeout: (0, 1),
         });
 
-    s.disconnect(TESTER_ADDR, NodeAddress(GATEWAY_ADDR as u32));
+    s.disconnect(s.tester.address().clone(), NodeAddress(GATEWAY_ADDR as u32));
 
     s.tick_n(10);
 
@@ -492,7 +492,7 @@ fn p5_full_stack_light_faults() {
             if is_pending {
                 t3_counter += 1;
                 if t3_counter >= T3_TICKS {
-                    let now = s.tcp_bus.now();
+                    let now = s.runner.outer_bus().now();
                     s.tester
                         .on_tcp_event(
                             &LinkEvent::ConnectionEstablished {

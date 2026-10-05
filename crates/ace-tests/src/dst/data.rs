@@ -2,7 +2,7 @@
 
 use crate::dst::{MAX_TICKS, TICK_MS};
 use crate::harness::{DstScenario, SEEDS_BASELINE, expect_nrc, expect_positive};
-use aced::sim::fault::FaultConfig;
+use ace_sim::fault::FaultConfig;
 
 // endregion: Imports
 

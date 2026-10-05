@@ -1,8 +1,8 @@
 // region: Imports
 
 use crate::harness::DstScenarioUdsClient;
-use aced::client::{client::UdsClient, config::ClientConfig};
-use aced::sim::{clock::Duration, io::NodeAddress};
+use ace_client::{client::UdsClient, config::ClientConfig};
+use ace_sim::{clock::Duration, io::NodeAddress};
 
 // endregion: Imports
 

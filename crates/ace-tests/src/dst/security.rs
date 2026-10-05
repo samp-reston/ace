@@ -1,6 +1,6 @@
 // region: Imports
 
-use aced::sim::fault::FaultConfig;
+use ace_sim::fault::FaultConfig;
 
 use crate::{
     dst::{MAX_TICKS, TICK_MS},

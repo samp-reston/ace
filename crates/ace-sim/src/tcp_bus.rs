@@ -39,15 +39,26 @@ pub struct TcpFaultConfig {
 
     /// Probability that a connection attempt times out without response.
     pub connection_timeout: (u32, u32),
+
+    /// Nominal link bit rate, in bits per second.
+    ///
+    /// Determines the baseline transmission time added to every segment before any
+    /// fault-injected delay. See `CanFaultConfig::bit_rate` for why a baseline of zero was a
+    /// defect rather than a simplification.
+    pub bit_rate: u32,
 }
 
 impl TcpFaultConfig {
+    /// 100 Mbit/s - the common DoIP in-vehicle Ethernet default.
+    const DEFAULT_BIT_RATE: u32 = 100_000_000;
+
     pub fn none() -> Self {
         Self {
             message: FaultConfig::none(),
             connection_refused: (0, 1),
             connection_reset: (0, 1),
             connection_timeout: (0, 1),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 
@@ -57,6 +68,7 @@ impl TcpFaultConfig {
             connection_refused: (1, 200),
             connection_reset: (1, 200),
             connection_timeout: (1, 200),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 
@@ -66,6 +78,7 @@ impl TcpFaultConfig {
             connection_refused: (1, 20),
             connection_reset: (1, 20),
             connection_timeout: (1, 20),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 }
@@ -323,7 +336,21 @@ impl<
             return false;
         }
 
-        self.inner.send(src, dst, data)
+        self.inner
+            .send_with_min_latency(src, dst, data, self.transmission_time(data.len()))
+    }
+
+    /// Time to put a segment of `payload_len` bytes on the link at the configured bit rate.
+    ///
+    /// Includes a fixed 54-byte allowance for Ethernet + IP + TCP headers on top of the
+    /// payload, so a single-byte DoIP message is not modelled as free.
+    fn transmission_time(&self, payload_len: usize) -> Duration {
+        const HEADER_OVERHEAD_BYTES: u64 = 54;
+
+        let bits = (HEADER_OVERHEAD_BYTES + payload_len as u64) * 8;
+        let bit_rate = self.tcp_faults.bit_rate.max(1) as u64;
+
+        Duration::from_micros(bits.saturating_mul(1_000_000) / bit_rate)
     }
 
     // endregion: Message delivery

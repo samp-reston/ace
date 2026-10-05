@@ -95,6 +95,28 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
     /// Returns `true` if the message was enqueued, `false` if it was dropped by fault injection or
     /// the queue is full
     pub fn send(&mut self, src: NodeAddress, dst: NodeAddress, data: &[u8]) -> bool {
+        self.send_with_min_latency(src, dst, data, Duration::ZERO)
+    }
+
+    /// Enqueues a message from `src` to `dst`, delivered no earlier than `min_latency` after now,
+    /// with fault injection applied on top.
+    ///
+    /// `SimBus` itself carries no notion of transmission rate - that varies by medium (a CAN
+    /// frame and a TCP segment do not cost the same to put on the wire), so it takes the floor
+    /// as a parameter instead of computing it. A caller with no medium-specific delay to add
+    /// gets the old zero-latency behaviour via `send`.
+    ///
+    /// Without a nonzero floor here, a message sent and a subsequent `tick()` call within the
+    /// same simulation step were indistinguishable from instantaneous delivery, which made the
+    /// harness's send/tick ordering within a step into a de facto latency model: whichever loop
+    /// order an integrator picked was "correct" only because nothing could disprove it.
+    pub fn send_with_min_latency(
+        &mut self,
+        src: NodeAddress,
+        dst: NodeAddress,
+        data: &[u8],
+        min_latency: Duration,
+    ) -> bool {
         let r = self
             .rng
             .chance(self.faults.message_loss.0, self.faults.message_loss.1);
@@ -132,9 +154,9 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             .chance(self.faults.message_delay.0, self.faults.message_delay.1)
         {
             let delay_us = self.rng.next_u64() % self.faults.max_delay.as_micros().max(1);
-            self.clock.now() + Duration::from_micros(delay_us)
+            self.clock.now() + min_latency + Duration::from_micros(delay_us)
         } else {
-            self.clock.now()
+            self.clock.now() + min_latency
         };
 
         let envelope = Envelope {

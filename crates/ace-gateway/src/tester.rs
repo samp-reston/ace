@@ -1145,6 +1145,23 @@ impl<
     // region: LinkEvent dispatch
 
     pub fn on_tcp_event(&mut self, event: &LinkEvent, now: Instant) -> Result<(), DoipTesterError> {
+        // Link events are delivered to every node on the simulated segment, just like
+        // frames. A tester must consume only transitions for the connection it owns;
+        // otherwise a second tester's ConnectionEstablished event makes this tester
+        // send a duplicate routing activation on its own connection, which the gateway
+        // correctly treats as AlreadyConnected and deactivates.
+        let belongs_to_this_tester = match event {
+            LinkEvent::ConnectionEstablished { from, .. }
+            | LinkEvent::ConnectionRefused { from, .. }
+            | LinkEvent::ConnectionTimeout { from, .. }
+            | LinkEvent::ConnectionReset { from, .. }
+            | LinkEvent::ConnectionClosed { from, .. } => from.0 == self.address.0,
+        };
+
+        if !belongs_to_this_tester {
+            return Ok(());
+        }
+
         match event {
             LinkEvent::ConnectionEstablished { to, .. } => {
                 let gateway = to.0 as u16;

@@ -40,15 +40,27 @@ pub struct CanFaultConfig {
     /// Probability the bus enters bus-off state on any given tick. When bus-off, all frames are
     /// dropped until `reset_bus_off()`.
     pub bus_off: (u32, u32),
+
+    /// Nominal bus bit rate, in bits per second.
+    ///
+    /// Determines the baseline transmission time added to every frame before any fault-injected
+    /// delay. Without this, `deliver_at` defaulted to the send time and a frame arrived on the
+    /// very next `tick()` regardless of size or rate - so an 8-byte frame and a full 4095-byte
+    /// ISO-TP transfer took equally long, and STmin/P2 timing bugs had no timing to expose them.
+    pub bit_rate: u32,
 }
 
 impl CanFaultConfig {
+    /// Classic CAN at 500 kbit/s - the common automotive default.
+    const DEFAULT_BIT_RATE: u32 = 500_000;
+
     pub fn none() -> Self {
         Self {
             message: FaultConfig::none(),
             arbitration_loss: (0, 1),
             bit_error: (0, 1),
             bus_off: (0, 1),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 
@@ -58,6 +70,7 @@ impl CanFaultConfig {
             arbitration_loss: (1, 200),
             bit_error: (1, 200),
             bus_off: (1, 200),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 
@@ -67,6 +80,7 @@ impl CanFaultConfig {
             arbitration_loss: (1, 10),
             bit_error: (1, 10),
             bus_off: (1, 10),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 }
@@ -189,7 +203,23 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
             return false;
         }
 
-        self.inner.send(src, dst, data)
+        self.inner
+            .send_with_min_latency(src, dst, data, self.transmission_time(data.len()))
+    }
+
+    /// Time to put a frame of `payload_len` bytes on the bus at the configured bit rate.
+    ///
+    /// Includes the classical CAN 2.0A/B fixed overhead (arbitration ID, control, CRC, ACK,
+    /// EOF, inter-frame spacing - 47 bits for an 11-bit identifier) on top of 8 bits per
+    /// payload byte. Approximate rather than exact to the bit-stuffing rules, which are
+    /// data-dependent, but the fixed overhead dominates for the short frames ISO-TP sends.
+    fn transmission_time(&self, payload_len: usize) -> Duration {
+        const FIXED_OVERHEAD_BITS: u64 = 47;
+
+        let bits = FIXED_OVERHEAD_BITS + (payload_len as u64) * 8;
+        let bit_rate = self.can_faults.bit_rate.max(1) as u64;
+
+        Duration::from_micros(bits.saturating_mul(1_000_000) / bit_rate)
     }
 
     // endregion: Message Delivery
