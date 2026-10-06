@@ -7,6 +7,7 @@ include:
       stages-extra:
         - ace-verify
         - ace-release
+        - ace-publish
       test-args: "--workspace --no-fail-fast"
       clippy-allow-failure: false
 
@@ -53,3 +54,19 @@ ace:semver:
     - when: never
   script:
     - sh ci/verify-semver.sh
+
+ace:publish:
+  stage: ace-publish
+  # Manual approval gate on a tag pipeline. Publishing is a one-way door - a
+  # crates.io version is immutable once released (yank-only), so a human presses
+  # play. CARGO_REGISTRY_TOKEN must be a protected + masked CI/CD variable,
+  # available only on protected tags. Runs last, so every verify/release job
+  # must pass before it is even available.
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+    - when: never
+  before_script:
+    - cargo install cargo-release --version 1.1.2 --locked --jobs 2
+  script:
+    - cargo release publish --workspace --execute --no-confirm

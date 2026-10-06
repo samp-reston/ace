@@ -156,3 +156,45 @@ jobs:
 
       - name: Validate release configuration
         run: cargo release config
+
+  publish:
+    name: Publish to crates.io
+    if: github.ref_type == 'tag'
+    needs:
+      - matrix
+      - msrv
+      - package
+      - semver
+      - release-config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Manual approval gate: add required reviewers to the `crates-io` environment
+    # in repository settings. Publishing is a one-way door - a crates.io version
+    # is immutable once released (yank-only), so a human approves each release.
+    environment: crates-io
+    permissions:
+      contents: read
+      # Required to mint a short-lived crates.io token via OIDC.
+      id-token: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.97.0
+
+      - name: Install cargo-release
+        run: cargo install cargo-release --version 1.1.2 --locked
+
+      # Trusted Publishing: exchanges the workflow's OIDC identity for a
+      # short-lived crates.io token, so no long-lived token is stored. Each
+      # crate must have this repo+workflow registered as a Trusted Publisher
+      # on crates.io first.
+      - name: Authenticate to crates.io (Trusted Publishing)
+        uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - name: Publish workspace crates in dependency order
+        run: cargo release publish --workspace --execute --no-confirm
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
