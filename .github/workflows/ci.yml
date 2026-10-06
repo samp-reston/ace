@@ -108,7 +108,7 @@ jobs:
 
   semver:
     name: Published API semver
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -136,7 +136,7 @@ jobs:
 
   release-config:
     name: Release configuration
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     needs:
       - matrix
       - msrv
@@ -159,7 +159,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     needs:
       - matrix
       - msrv
