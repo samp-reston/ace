@@ -272,6 +272,32 @@ fn a_lockout_survives_an_ecu_reset() {
 
 // endregion: ECU reset returns the server to its power-on state
 
+// region: The configured key length is enforced
+
+/// A malformed key length is rejected as invalid format and does not consume the pending seed.
+#[test]
+fn a_key_of_the_wrong_length_is_refused_without_consuming_the_seed() {
+    let mut s = server(true, SEED_LENGTH, 5);
+
+    exchange(&mut s, &REQUEST_SEED).expect("seed response");
+
+    // The configured key length is one byte, but this request carries no key bytes.
+    let malformed = exchange(&mut s, &[0x27, LEVEL + 1]).expect("answered");
+    assert_eq!(
+        nrc_of(&malformed),
+        Some(0x13),
+        "wrong key length is malformed input, not an invalid key"
+    );
+
+    let valid = exchange(&mut s, &SEND_KEY).expect("valid key answered");
+    assert_eq!(
+        valid[0], 0x67,
+        "the malformed request must not consume the seed"
+    );
+}
+
+// endregion: The configured key length is enforced
+
 // region: The configured seed length is enforced
 
 /// A provider returning a different seed length than the level declares is refused.

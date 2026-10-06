@@ -6,7 +6,6 @@
 
 use ace_transport::doip_vehicle_driver::{DoipVehicleDriver, VehicleDriverConfig};
 use aced::client::event::ClientEvent;
-use aced::doip::header::ProtocolVersion;
 use aced::gateway::tester::{DoipConnectionConfig, DoipTesterEvent};
 use std::time::Duration;
 
@@ -28,13 +27,7 @@ fn main() -> std::io::Result<()> {
     // }
     // endregion
 
-    let config = VehicleDriverConfig::new(
-        0x0E00,
-        Duration::from_millis(1),
-        65535,
-        "255.255.255.255",
-        ProtocolVersion::Iso13400_2012,
-    );
+    let config = VehicleDriverConfig::new(0x0E00, Duration::from_millis(1), 65535);
     let mut driver = DoipVehicleDriver::new(config);
 
     // Connect to gateway at 0x0E80 logical address

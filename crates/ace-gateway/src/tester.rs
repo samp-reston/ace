@@ -237,7 +237,7 @@ impl<
 
         Self {
             address,
-            client: UdsClient::new(config, NodeAddress(tester_address as u32)),
+            client: UdsClient::new(config),
             p2: default_p2,
             p2_star: default_p2_star,
             timing_tolerance,

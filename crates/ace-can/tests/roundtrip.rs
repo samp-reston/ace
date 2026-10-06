@@ -1,6 +1,8 @@
 extern crate std;
 use std::vec::Vec;
 
+use proptest::prelude::*;
+
 use ace_can::isotp::address::IsoTpAddressingMode;
 use ace_can::isotp::reassembler::{ReassembleResult, Reassembler, ReassemblerConfig};
 use ace_can::isotp::segmenter::{SegmentResult, Segmenter, SegmenterConfig};
@@ -65,6 +67,37 @@ fn roundtrip<const N: usize>(
         .to_vec()
 }
 // endregion: Helpers
+
+proptest! {
+    /// Every valid payload survives segmentation and reassembly across the supported
+    /// addressing modes and both classic-CAN and CAN-FD frame budgets.
+    #[test]
+    fn prop_segment_reassemble_roundtrip(
+        payload in proptest::collection::vec(any::<u8>(), 1..=256),
+        mode in 0u8..3,
+        can_fd in any::<bool>(),
+    ) {
+        let addressing_mode = match mode {
+            0 => IsoTpAddressingMode::Normal,
+            1 => IsoTpAddressingMode::Extended,
+            _ => IsoTpAddressingMode::Mixed,
+        };
+
+        let segmenter_config = if can_fd {
+            SegmenterConfig::fd(addressing_mode.clone())
+        } else {
+            SegmenterConfig::classic(addressing_mode.clone())
+        };
+
+        let actual = roundtrip::<256>(
+            &payload,
+            segmenter_config,
+            ReassemblerConfig::new(addressing_mode),
+        );
+
+        prop_assert_eq!(actual, payload);
+    }
+}
 
 // region: Normal addressing - classic CAN
 

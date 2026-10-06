@@ -48,7 +48,8 @@ impl<
     const MAX_DATA: usize,
 > UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
-    pub fn new(config: ClientConfig, address: NodeAddress) -> Self {
+    pub fn new(config: ClientConfig) -> Self {
+        let address = NodeAddress(u32::from(config.physical_address));
         let server = NodeAddress(config.target_address as u32);
         Self {
             config,

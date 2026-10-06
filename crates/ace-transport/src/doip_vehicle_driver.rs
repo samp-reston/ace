@@ -59,31 +59,18 @@ pub struct VehicleDriverConfig {
     /// Read buffer size per TCP connection.
     pub read_buf_size: usize,
 
-    /// UDP port for DoIP discovery.
+    /// UDP port for DoIP discovery. Discovery address and protocol version are configured through
+    /// [`DiscoveryConfig`] and [`discover_gateways`].
     pub udp_port: u16,
-
-    /// UDP multicast address for vehicle announcement.
-    pub udp_multicast_addr: &'static str,
-
-    /// The default protocol version used.
-    pub default_protocol_version: ProtocolVersion,
 }
 
 impl VehicleDriverConfig {
-    pub fn new(
-        tester_address: u16,
-        tick_interval: Duration,
-        read_buf_size: usize,
-        udp_multicast_addr: &'static str,
-        protocol: ProtocolVersion,
-    ) -> Self {
+    pub fn new(tester_address: u16, tick_interval: Duration, read_buf_size: usize) -> Self {
         Self {
             tester_address,
             tick_interval,
             read_buf_size,
             udp_port: 13400,
-            udp_multicast_addr,
-            default_protocol_version: protocol,
         }
     }
 }
@@ -112,8 +99,11 @@ struct _TcpConnectionHandle {
 ///
 /// ```ignore
 ///
-/// let mut driver = DoipVehicleDriver::new(VehicleDriverConfig::new(0x0E00,
-/// Duration::from_millis(1), 65535, 13400, "0.0.0.0"));
+/// let mut driver = DoipVehicleDriver::new(VehicleDriverConfig::new(
+///     0x0E00,
+///     Duration::from_millis(1),
+///     65535,
+/// ));
 ///
 /// // Connect to a gateway at a known IP
 /// let conn_id = driver.connect(

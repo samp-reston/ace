@@ -97,6 +97,8 @@ type MyDoipDstScenario = DoipDstScenario<
 //  region: Tick parameters
 
 const MAX_TICKS: usize = 1_000;
+const CHAOS_SEEDS: u64 = 8;
+const CHAOS_MAX_TICKS: usize = 2_000;
 
 //  endregion: Tick parameters
 
@@ -542,14 +544,52 @@ fn p5_full_stack_light_faults() {
 // region: P6 - chaos, no silent hangs
 
 #[test]
-#[ignore = "Takes too long"]
-fn p6_no_silent_hands_under_chaos() {
-    for seed in 0..100u64 {
-        let mut s = MyDoipDstScenario::chaos(seed);
+fn p6_uds_exchange_resolves_under_chaos() {
+    for seed in 0..CHAOS_SEEDS {
+        let mut s = MyDoipDstScenario::baseline(seed);
         s.connect();
-        s.tick_n(MAX_TICKS * 10);
+        s.tick_n(50);
+        assert!(
+            s.is_activated(),
+            "seed {seed}: deterministic activation failed"
+        );
 
-        let _events = s.drain_events();
+        // Keep connection setup deterministic. Chaos begins at the request boundary so a
+        // dropped or delayed request must still become an observable UDS terminal outcome.
+        s.runner
+            .outer_bus()
+            .set_faults(ace_sim::tcp_bus::TcpFaultConfig::chaos());
+        s.runner
+            .inner_bus()
+            .set_faults(ace_sim::can_bus::CanFaultConfig::chaos());
+
+        s.request_default(&[0x10, 0x03])
+            .expect("request should be accepted before faults run");
+
+        let mut resolved = false;
+        for _ in 0..CHAOS_MAX_TICKS {
+            let events = s.drain_events();
+            if events.iter().any(|(_, _, event)| {
+                matches!(
+                    event,
+                    DoipTesterEvent::Uds(
+                        ClientEvent::PositiveResponse { sid: 0x10, .. }
+                            | ClientEvent::NegativeResponse { sid: 0x10, .. }
+                            | ClientEvent::Timeout { sid: 0x10 }
+                    )
+                )
+            }) {
+                resolved = true;
+                break;
+            }
+            s.tick();
+        }
+
+        assert!(
+            resolved,
+            "seed {seed}: UDS request did not reach a response, NRC, or timeout within \
+             {CHAOS_MAX_TICKS} ticks"
+        );
     }
 }
 

@@ -36,10 +36,22 @@ const P2: u64 = 150;
 
 type TestClient = UdsClient<MAX_FRAME, MAX_OUTBOX, PENDING, MAX_EVENTS, PERIODIC, MAX_DATA>;
 
+/// The public configuration owns the client's source address.
+#[test]
+fn client_uses_configured_physical_address() {
+    let client = TestClient::new(ClientConfig::new(CLIENT, SERVER));
+
+    assert_eq!(
+        client.address(),
+        &NodeAddress(u32::from(CLIENT)),
+        "the client identity must come from ClientConfig"
+    );
+}
+
 /// A client with one outstanding ReadDataByIdentifier.
 fn client_awaiting_response() -> TestClient {
     let config = ClientConfig::new(CLIENT, SERVER).with_p2_timeout(Duration::from_millis(P2));
-    let mut client = TestClient::new(config, NodeAddress(u32::from(CLIENT)));
+    let mut client = TestClient::new(config);
 
     client
         .request(&[0x22, 0xF1, 0x90], Instant::ZERO)

@@ -1105,6 +1105,17 @@ where
                 .map(|l| l.lockout_duration)
                 .unwrap_or(Duration::from_millis(DEFAULT_LOCKOUT));
 
+            if let Some(expected) = level_cfg.map(|l| l.key_length) {
+                if key.len() != expected {
+                    return self.nrc(
+                        src,
+                        0x27,
+                        H::Error::incorrect_message_length_or_invalid_format(),
+                        now,
+                    );
+                }
+            }
+
             let seed = self.security.pending_seed.clone();
 
             match self.security_provider.validate_key(level, &seed, key) {
