@@ -1,6 +1,6 @@
 use ace_core::io::NodeAddress;
-use ace_doip::session::ActivationDenialReason;
 use ace_doip::session::ActivationAuthProvider;
+use ace_doip::session::ActivationDenialReason;
 use ace_gateway::config::{CanNodeEntry, GatewayConfig};
 use ace_gateway::gateway::DoipGateway;
 
@@ -55,11 +55,7 @@ fn main() {
                 functional_can_id: 0x7DF,
             });
 
-    let gateway: Gateway = DoipGateway::new(
-        config,
-        AllowActivation,
-        NodeAddress(0x0E80),
-    );
+    let gateway: Gateway = DoipGateway::new(config, AllowActivation, NodeAddress(0x0E80));
 
     assert_eq!(gateway.address(), &NodeAddress(0x0E80));
 }

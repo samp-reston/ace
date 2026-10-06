@@ -57,10 +57,11 @@ opting into the derives they need.
 ## Feature unification hides defects
 
 `cargo check --workspace` compiles every crate with features **unified across the
-whole graph**. Because `ace-tests` depends on the `ace-api` facade, which enables
-`ace-core/alloc`, a workspace-wide check silently builds the protocol crates in
-their `alloc` configuration. Defects present only in the no-allocator
-configuration do not appear.
+whole graph**. Historically, `ace-tests` depended on the `ace-api` facade, which
+enabled `ace-core/alloc`; the demonstration now depends on the individual crates
+instead, but other workspace consumers can still unify features. A workspace-wide
+check can therefore silently build protocol crates in their `alloc` configuration.
+Defects present only in the no-allocator configuration do not appear.
 
 Concretely: `ace_core::Vec` is `heapless::Vec` without `alloc` and
 `alloc::vec::Vec` with it. Their `push` methods have different signatures —

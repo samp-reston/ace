@@ -43,6 +43,25 @@ bare-metal target.
 
 ---
 
+## Runnable examples
+
+The published library layers each include a small host-runnable example that uses the crate
+directly with default features disabled:
+
+| Consumer layer | Command |
+|---|---|
+| Core codec | `cargo run -p ace-core --example codec --no-default-features` |
+| ISO-TP/CAN | `cargo run -p ace-can --example segmenter --no-default-features` |
+| UDS client | `cargo run -p ace-client --example request --no-default-features` |
+| UDS server | `cargo run -p ace-server --example server --no-default-features` |
+| DoIP | `cargo run -p ace-doip --example header --no-default-features` |
+| Gateway | `cargo run -p ace-gateway --example configure --no-default-features` |
+| Simulation trace/replay | `cargo run -p ace-sim --example trace_replay --no-default-features` |
+
+These examples are intentionally small: they show the public construction boundary for each
+subset, while the full multi-node behavior remains in the workspace-level `ace-tests`
+demonstration.
+
 ## Crate reference
 
 ### `ace-core`

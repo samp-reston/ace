@@ -81,21 +81,21 @@ fn main() {
             .with_service(ServiceConfig::new(0x22, &[0x01, 0x03]))
             .with_did(DidConfig::read_only(0xF190, &[0x01, 0x03]));
 
-    let mut server: Server = UdsServer::new(
-        config,
-        Handler,
-        NoSecurity,
-        NodeAddress(0x0001),
-    );
+    let mut server: Server = UdsServer::new(config, Handler, NoSecurity, NodeAddress(0x0001));
 
     let request = InboundFrame::new(
         NodeAddress(0x0E00),
         NodeAddress(0x0001),
         &[0x22, 0xF1, 0x90],
     );
-    server.handle(&request, Instant::ZERO).expect("request handled");
+    server
+        .handle(&request, Instant::ZERO)
+        .expect("request handled");
 
     let mut outbox: Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX> = Vec::new();
     server.drain_outbox(&mut outbox).expect("outbox capacity");
-    assert_eq!(outbox[0].1.as_slice(), &[0x62, 0xF1, 0x90, b'A', b'C', b'E', b'!']);
+    assert_eq!(
+        outbox[0].1.as_slice(),
+        &[0x62, 0xF1, 0x90, b'A', b'C', b'E', b'!']
+    );
 }

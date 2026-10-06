@@ -6,5 +6,8 @@ fn main() {
 
     assert_eq!(value, 0x1234);
     assert!(bytes.is_empty());
-    assert_eq!(codec_err_str("invalid diagnostic frame").as_str(), "invalid diagnostic frame");
+    assert_eq!(
+        codec_err_str("invalid diagnostic frame").as_str(),
+        "invalid diagnostic frame"
+    );
 }
