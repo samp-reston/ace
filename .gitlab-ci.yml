@@ -3,7 +3,7 @@ include:
     inputs:
       target: lib
       rust-image: rust:1.97.0
-      cargo-home: "$CI_PROJECT_DIR/.cargo-home"
+      cargo-home: "$CI_PROJECT_DIR/.cargo_home"
       stages-extra:
         - ace-verify
         - ace-release
@@ -14,7 +14,7 @@ default:
   image: rust:1.97.0
 
 variables:
-  CARGO_HOME: "$CI_PROJECT_DIR/.cargo-home"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo_home"
   CARGO_TARGET_DIR: "$CI_PROJECT_DIR/target"
   CARGO_TERM_COLOR: always
   CARGO_BUILD_JOBS: "2"
@@ -22,8 +22,8 @@ variables:
 cache:
   key: "$CI_JOB_NAME"
   paths:
-    - .cargo-home/registry
-    - .cargo-home/git
+    - .cargo_home/registry
+    - .cargo_home/git
 
 ace:matrix:
   stage: ace-verify

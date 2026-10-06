@@ -31,4 +31,3 @@ ace-doip = { path = "crates/ace-doip", version = "0.6.0" }
 ace-server = { path = "crates/ace-server", version = "0.6.0" }
 ace-client = { path = "crates/ace-client", version = "0.6.0" }
 ace-gateway = { path = "crates/ace-gateway", version = "0.6.0" }
-ace-transport = { path = "crates/ace-transport", version = "0.6.0" }

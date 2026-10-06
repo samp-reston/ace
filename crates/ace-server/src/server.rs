@@ -1177,7 +1177,7 @@ where
 
         let mut resp: Vec<u8, MAX_FRAME> = Vec::new();
 
-        for chunk in payload.chunks_exact(2) {
+        for chunk in payload.as_chunks::<2>().0 {
             let did = u16::from_be_bytes([chunk[0], chunk[1]]);
 
             if !self.config.did_readable(did, self.session.session_type) {
