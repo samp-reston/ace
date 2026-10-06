@@ -1,0 +1,6 @@
+# Pin the formatting style explicitly rather than inheriting it from each crate's
+# `edition = "2024"`. Inheritance is consistent today only because every crate
+# happens to declare the same edition; pinning here keeps `cargo fmt --check`
+# stable across toolchain upgrades and when a crate is added on a different
+# Rust edition, so it can serve as a CI gate.
+style_edition = "2024"

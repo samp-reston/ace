@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromField, FromVariant};
 use syn::{
-    parse::{Parse, ParseStream},
     DeriveInput, Expr, Token,
+    parse::{Parse, ParseStream},
 };
 
 // region: Container
@@ -10,7 +10,7 @@ use syn::{
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(frame))]
 pub struct ContainerAttrs {
-    /// Error type for the generated impl. Must implement `Into<DiagError>`.
+    /// Error type for the generated impl. Must implement `Into<CodecError>`.
     ///
     /// ```ignore
     /// #[frame(error = "UdsError")]

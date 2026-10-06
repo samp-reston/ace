@@ -1,6 +1,6 @@
 // region: Imports
 
-use aced::sim::clock::Duration;
+use ace_sim::clock::Duration;
 
 // endregion: Imports
 
@@ -52,6 +52,13 @@ pub mod session;
 pub mod transfer;
 
 pub mod doip;
+
+/// P9: two testers on one gateway do not observe each other's traffic.
+///
+/// Built directly on `TwoTierRunner`, bypassing `DoipDstScenario`, because the fixture's
+/// `tester` field is still a single `DoipTester` - proving this needs the runner to host
+/// two testers, which `DoipDstScenario` does not yet expose as a builder option.
+pub mod two_tester;
 
 // region: Tick Parameters
 

@@ -1,0 +1,75 @@
+include:
+  - component: $CI_SERVER_FQDN/rust-ci/rust-ci/base-pipeline@1.7.0
+    inputs:
+      target: lib
+      rust-image: rust:1.97.0
+      cargo-home: "$CI_PROJECT_DIR/.cargo_home"
+      stages-extra:
+        - ace-verify
+        - ace-release
+        - ace-publish
+      test-args: "--workspace --no-fail-fast"
+      clippy-allow-failure: false
+
+default:
+  image: rust:1.97.0
+
+variables:
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo_home"
+  CARGO_TARGET_DIR: "$CI_PROJECT_DIR/target"
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "2"
+
+cache:
+  key: "$CI_JOB_NAME"
+  paths:
+    - .cargo_home/registry
+    - .cargo_home/git
+
+ace:matrix:
+  stage: ace-verify
+  before_script:
+    - rustup component add rustfmt
+    - rustup target add thumbv7em-none-eabihf
+    - cargo install cargo-hack --version 0.6.45 --locked --jobs 2
+  script:
+    - sh ci/verify-matrix.sh
+
+ace:msrv:
+  stage: ace-verify
+  before_script:
+    - rustup toolchain install 1.88.0 --profile minimal
+    - cargo install cargo-msrv --version 0.19.3 --locked --jobs 2
+  script:
+    - sh ci/verify-msrv.sh
+
+ace:semver:
+  stage: ace-release
+  before_script:
+    - cargo install cargo-semver-checks --version 0.47.0 --locked --jobs 2
+  rules:
+    # The development branch intentionally contains unreleased breaking changes.
+    # Run this against the published package baseline only when cutting a tag.
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]/'
+    - when: never
+  script:
+    - sh ci/verify-semver.sh
+
+ace:publish:
+  stage: ace-publish
+  # Manual approval gate on a tag pipeline. Publishing is a one-way door - a
+  # crates.io version is immutable once released (yank-only), so a human presses
+  # play. CARGO_REGISTRY_TOKEN must be a protected + masked CI/CD variable,
+  # available only on protected tags. Runs last, so every verify/release job
+  # must pass before it is even available.
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]/'
+      when: manual
+    - when: never
+  before_script:
+    - cargo install cargo-release --version 1.1.2 --locked --jobs 2
+  script:
+    # --allow-branch '*': a tag pipeline checks out a detached HEAD, which the
+    # release.toml allow-branch=["main"] guard would otherwise reject. The
+    # protected v* tag + manual gate are the real control here.
+    - cargo release publish --workspace --execute --no-confirm --allow-branch '*'

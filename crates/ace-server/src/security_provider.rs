@@ -37,7 +37,7 @@ pub trait SecurityProvider {
     ///
     /// Writes seed bytes into `buf` and returns the number of bytes written. On real hardware the
     /// seed must be non-deterministic (hardware RNG). In simulation derive from the seeded
-    /// `ace_sim::rng::Rng`.
+    /// `ace_core::rng::Rng`.
     fn generate_seed(&mut self, level: u8, buf: &mut [u8]) -> Result<usize, SecurityError>;
 
     /// Validates a key against the previously generated seed.

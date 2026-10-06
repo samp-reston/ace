@@ -1,5 +1,5 @@
 use crate::{UdsError, ValidationError};
-use ace_core::{DiagError, FrameWrite};
+use ace_core::{CodecError, FrameWrite};
 use ace_macros::{FrameCodec, FrameRead, FrameWrite};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -48,7 +48,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for SecurityAccessResponse<'a> {
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let access_type = *buf
             .first()
-            .ok_or(UdsError::from(DiagError::LengthMismatch {
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
                 expected: 1,
                 actual: 0,
             }))?;
@@ -67,7 +67,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for SecurityAccessRequest<'a> {
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let access_type = *buf
             .first()
-            .ok_or(UdsError::from(DiagError::LengthMismatch {
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
                 expected: 1,
                 actual: 0,
             }))?;

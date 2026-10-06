@@ -6,7 +6,7 @@ Foundation layer. Defines the three codec traits that everything else builds on:
 - `FrameWrite` — encode into a `Writer` (either `&mut [u8]` or `BytesMut`)
 - `Writer` — sealed trait abstracting alloc and no-alloc write targets
 
-Also provides `DiagError`, `AddressMode`, `DiagnosticAddress`, and the `FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
+Also provides `CodecError`, `AddressMode`, `DiagnosticAddress`, and the `FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
 
 ```toml
 [dependencies]

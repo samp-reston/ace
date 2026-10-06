@@ -32,7 +32,7 @@ pub struct WriteMemoryByAddressResponse<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ace_core::codec::{decode_from_slice, FrameWrite};
+    use ace_core::codec::{FrameWrite, decode_from_slice};
 
     #[cfg(feature = "alloc")]
     use alloc::borrow::ToOwned;

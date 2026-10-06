@@ -8,19 +8,19 @@ use ace_proto::can::frame::fd::{CanFdFrame, CanFdFrameMut};
 
 // region: Offsets
 
-/// Byte layout of a raw CAN FD frame:
-///
-/// [0..=3] - 32-bit CAN ID word (big-endian)
-///           bit 31: extended frame flag (EFF)
-///           bit 30: RRS (replaces RTR in CAN FD, must be 0)
-///           bit 29: error frame flag (ERR)
-///           bits 28-0: CAN ID
-/// [4]     - flags byte
-///           bit 2: EDL (Extended Data Length) - must be 1 for CAN FD
-///           bit 1: BRS (Bit Rate Switch)
-///           bit 0: ESI (Error State Indicator)
-/// [5]     - DLC (0–15, maps to 0–64 bytes via dlc_to_len)
-/// [6..]   - data bytes (0–64 bytes)
+// Byte layout of a raw CAN FD frame:
+//
+// [0..=3] - 32-bit CAN ID word (big-endian)
+//           bit 31: extended frame flag (EFF)
+//           bit 30: RRS (replaces RTR in CAN FD, must be 0)
+//           bit 29: error frame flag (ERR)
+//           bits 28-0: CAN ID
+// [4]     - flags byte
+//           bit 2: EDL (Extended Data Length) - must be 1 for CAN FD
+//           bit 1: BRS (Bit Rate Switch)
+//           bit 0: ESI (Error State Indicator)
+// [5]     - DLC (0–15, maps to 0–64 bytes via dlc_to_len)
+// [6..]   - data bytes (0–64 bytes)
 
 // endregion: Offsets
 
@@ -97,27 +97,27 @@ pub trait CanFdFrameExt {
     // region: Flags
 
     fn is_extended_frame(&self) -> bool {
-        self.id_word().map_or(false, |w| w & EFF_FLAG != 0)
+        self.id_word().is_some_and(|w| w & EFF_FLAG != 0)
     }
 
     fn is_rrs(&self) -> bool {
-        self.id_word().map_or(false, |w| w & RRS_FLAG != 0)
+        self.id_word().is_some_and(|w| w & RRS_FLAG != 0)
     }
 
     fn is_error_frame(&self) -> bool {
-        self.id_word().map_or(false, |w| w & ERR_FLAG != 0)
+        self.id_word().is_some_and(|w| w & ERR_FLAG != 0)
     }
 
     fn is_edl(&self) -> bool {
-        self.flags_byte().map_or(false, |f| f & EDL_FLAG != 0)
+        self.flags_byte().is_some_and(|f| f & EDL_FLAG != 0)
     }
 
     fn is_brs(&self) -> bool {
-        self.flags_byte().map_or(false, |f| f & BRS_FLAG != 0)
+        self.flags_byte().is_some_and(|f| f & BRS_FLAG != 0)
     }
 
     fn is_esi(&self) -> bool {
-        self.flags_byte().map_or(false, |f| f & ESI_FLAG != 0)
+        self.flags_byte().is_some_and(|f| f & ESI_FLAG != 0)
     }
 
     // endregion: Flags

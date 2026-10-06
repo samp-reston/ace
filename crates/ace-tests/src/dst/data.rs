@@ -1,9 +1,8 @@
 // region: Imports
 
 use crate::dst::{MAX_TICKS, TICK_MS};
-use crate::harness::{assert_session, expect_nrc, expect_positive, DstScenario, SEEDS_BASELINE};
-use aced::sim::clock::Duration;
-use aced::sim::fault::FaultConfig;
+use crate::harness::{DstScenario, SEEDS_BASELINE, expect_nrc, expect_positive};
+use ace_sim::fault::FaultConfig;
 
 // endregion: Imports
 
@@ -22,7 +21,7 @@ fn p1_rdbi_vin_default_session() {
 
         let data = expect_positive(&mut s.client, 0x22);
         // Response: [DID_high, DID_low, data...]
-        assert_eq!(data.get(0).copied(), Some(0xF1), "seed {seed}");
+        assert_eq!(data.first().copied(), Some(0xF1), "seed {seed}");
         assert_eq!(data.get(1).copied(), Some(0x90), "seed {seed}");
         // VIN from fixture: "TESTVIN1234567890"
         let vin = data.get(2..).unwrap_or(&[]);

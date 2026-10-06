@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
-use crate::attrs::{get_repr, ContainerAttrs, FieldAttrs, VariantAttrs};
+use crate::attrs::{ContainerAttrs, FieldAttrs, VariantAttrs, get_repr};
 use crate::util::{compile_error, has_lifetime};
 
 // region: Entry point
@@ -42,7 +42,7 @@ fn derive_struct(
             return compile_error(
                 proc_macro2::Span::call_site(),
                 "FrameRead requires named fields",
-            )
+            );
         }
     };
 
@@ -70,13 +70,13 @@ fn derive_struct(
                 let #ident: #ty = Default::default();
             }
         } else if let Some(length_expr) = &attrs.length {
-            // Computed length - take_n returns DiagError directly,
-            // container must implement From<DiagError>.
+            // Computed length - take_n returns CodecError directly,
+            // container must implement From<CodecError>.
             quote! {
                 let #ident: #ty = ace_core::codec::take_n(
                     buf,
                     (#length_expr) as usize,
-                ).map_err(|e| <#error as From<ace_core::DiagError>>::from(e))?;
+                ).map_err(|e| <#error as From<ace_core::CodecError>>::from(e))?;
             }
         } else if attrs.read_all {
             // Consume all remaining bytes - no error possible
@@ -90,7 +90,7 @@ fn derive_struct(
         } else {
             // Default - delegate to the field type's FrameRead impl.
             // Direct routing: FieldError -> ContainerError via From<FieldError>.
-            // No intermediate DiagError - container error only needs to implement
+            // No intermediate CodecError - container error only needs to implement
             // From for each field error type it encounters.
             quote! {
                 let #ident = <#ty as ace_core::codec::FrameRead>::decode(buf)
@@ -207,7 +207,7 @@ fn derive_enum(
                 return compile_error(
                     proc_macro2::Span::call_site(),
                     "FrameRead enum variants must be newtype(T) or unit",
-                )
+                );
             }
         };
 
@@ -217,11 +217,11 @@ fn derive_enum(
     // Always emit a catch-all error arm. Even when an id_pat variant is present
     // it may not cover the full u8 range - the catch-all handles any remaining
     // values and ensures the match is exhaustive.
-    // Routes through DiagError since unknown discriminant is always a transport-
-    // level framing error - container must implement From<DiagError>.
+    // Routes through CodecError since an unknown discriminant is always a wire-format
+    // error - container must implement From<CodecError>.
     arms.push(quote! {
-        _ => Err(<#error as From<ace_core::DiagError>>::from(
-            ace_core::DiagError::InvalidFrame(
+        _ => Err(<#error as From<ace_core::CodecError>>::from(
+            ace_core::CodecError::InvalidFrame(
                 heapless::String::try_from("unknown discriminant").unwrap_or_default()
             )
         )),
@@ -246,7 +246,7 @@ fn derive_enum(
             fn decode(buf: &mut &#decode_lt [u8]) -> Result<Self, Self::Error> {
                 let __saved = *buf;
                 let __disc = <#disc_ty as ace_core::codec::FrameRead>::decode(buf)
-                    .map_err(|e| <#error as From<ace_core::DiagError>>::from(e))?;
+                    .map_err(|e| <#error as From<ace_core::CodecError>>::from(e))?;
                 match __disc {
                     #(#arms)*
                 }

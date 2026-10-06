@@ -1,31 +1,85 @@
 # `ace-sim`
 
-Deterministic simulation infrastructure. Everything needed to test protocol state machines reproducibly.
+Deterministic simulation infrastructure for testing protocol state machines.
 
-**`SimBus<N, Q>`** — message delivery with fault injection. Seeded RNG makes every run reproducible. Configurable faults: message loss, reorder, delay, corruption, timeout.
+`ace-sim` is optional infrastructure. Production consumers depend on the individual protocol
+crates they need; the simulation crate is for host-side integration, deterministic replay, and
+fault-driven validation.
 
-**`TcpSimBus<N, Q>`** — wraps `SimBus` and adds TCP connection state. The bus owns connection state — nodes don't track it. TCP fault injection: connection refused, mid-session reset, connect timeout.
+## Simulation layers
 
-**`CanSimBus<N, Q>`** — wraps `SimBus` and adds CAN bus state (Active / ErrorPassive / BusOff). CAN fault injection: arbitration loss, bit error, bus-off.
+- **`SimBus<MAX_DATA, MAX_QUEUED>`** — bounded message delivery with seeded randomness,
+  probabilistic loss/reorder/delay/corruption/timeout faults, and deterministic scripted faults.
+- **`TcpSimBus`** — connection-oriented delivery with bounded per-pair connections, connection
+  refusal/reset/timeout faults, and baseline link transmission latency.
+- **`CanSimBus`** — connectionless delivery with CAN bus state, arbitration loss, bit errors,
+  bus-off transitions, and baseline CAN transmission latency.
+- **`TwoTierRunner`** — composes an outer bus, an inner bus, and bridge nodes without knowing
+  whether they represent DoIP, CAN, or another layered transport.
+- **`TraceBus` / `TraceReplay`** — record bounded bus operations and replay their observable
+  outputs without consulting the RNG or fault configuration.
 
-**`SimNode<N, Q>`** — trait for nodes on the simulation buses:
+All clocks are virtual and all buffers are bounded. The crate builds with `no_std`; the optional
+`alloc` feature changes the backing storage but not the public capacity contracts.
+
+## Basic deterministic bus
 
 ```rust
-pub trait SimNode<const N: usize, const Q: usize> {
-    type Error: core::fmt::Debug;
-    fn address(&self) -> &NodeAddress;
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) -> Result<(), Self::Error>;
-    fn tick(&mut self, now: Instant) -> Result<(), Self::Error>;
-    fn drain_outbox(&mut self, out: &mut Vec<(NodeAddress, Vec<u8, N>), Q>) -> usize;
-}
+use ace_core::clock::Duration;
+use ace_core::io::NodeAddress;
+use ace_sim::bus::SimBus;
+use ace_sim::fault::FaultConfig;
+
+let mut bus: SimBus<8, 4> = SimBus::new(7, FaultConfig::none());
+let sender = NodeAddress(1);
+let receiver = NodeAddress(2);
+
+assert!(bus.send(sender, receiver, &[0x10, 0x03]));
+let delivered = bus.tick(Duration::ZERO);
+assert_eq!(delivered.len(), 1);
 ```
 
-**`SimNodeErased<N, Q>`** — object-safe version with errors swallowed internally, enabling heterogeneous slices of different node types.
+## Scripted frame faults
 
-**`SimRunner<N, Q>`** — drives `SimNodeErased` slices over a `SimBus`.
+`FaultPlan` is protocol-neutral. It can drop, delay, duplicate, or replace an opaque byte in a
+single send attempt. A consumer may use `ReplaceByte` to create a malformed protocol frame, but
+`ace-sim` never interprets the byte as an NRC, PCI nibble, or sequence number.
 
-**`TcpSimRunner<N, Q>`** — drives nodes over a `TcpSimBus`, additionally delivering `TcpEvent`s to nodes implementing `TcpEventHandler`.
+```rust
+use ace_sim::fault::{FaultConfig, FaultPlan, ScriptedFault};
 
-**`CanSimRunner<N, Q>`** — drives nodes over a `CanSimBus`, additionally delivering `CanEvent`s to nodes implementing `CanEventHandler`.
+let mut plan = FaultPlan::new();
+plan.push(ScriptedFault::DropNext).expect("plan capacity");
 
-**`FaultConfig`** — three presets: `none()`, `light()`, `chaos()`. All probabilities are `(numerator, denominator)` pairs for reproducibility.
+let mut faults = FaultConfig::none();
+faults.script = plan;
+```
+
+## Trace and replay
+
+```rust
+use ace_core::clock::Duration;
+use ace_core::io::NodeAddress;
+use ace_sim::fault::FaultConfig;
+use ace_sim::trace::TraceBus;
+
+let a = NodeAddress(1);
+let b = NodeAddress(2);
+let mut bus: TraceBus<8, 4, 16> = TraceBus::new(7, FaultConfig::none());
+
+assert!(
+    bus.send(a.clone(), b.clone(), &[1, 2])
+        .expect("trace capacity")
+);
+let _ = bus.tick(Duration::ZERO).expect("trace capacity");
+
+let trace = bus.trace().clone();
+let mut replay = trace.replay();
+let _ = replay.send(&a, &b, &[1, 2], Duration::ZERO);
+let _ = replay.tick(Duration::ZERO).expect("recorded tick");
+replay.finish().expect("complete trace");
+```
+
+For protocol-specific faulty peers—wrong NRCs, unbounded response-pending chains, stale
+ISO-TP sequence numbers, or deliberate session behavior—use a future testkit layer above this
+crate rather than adding invalid-behavior modes to production protocol libraries.

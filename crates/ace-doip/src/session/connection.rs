@@ -6,13 +6,14 @@
 
 // region: Imports
 
+use crate::error::DoipError;
 use crate::{
     header::PayloadType,
     payload::{DiagnosticNackCode, RoutingActivationRequest, RoutingActivationResponse},
     session::{ActivationAuthProvider, ActivationDenialReason, ActivationStateMachine},
 };
 use ace_core::FrameRead;
-use ace_sim::clock::{Duration, Instant};
+use ace_core::clock::{Duration, Instant};
 
 // endregion: Imports
 
@@ -59,14 +60,14 @@ pub enum ConnectionPhase {
 
 // endregion: ConnectionPhase
 
-// region: ConnectionEvent
+// region: ConnectionAction
 
 /// Events produced by the connection state machine.
 ///
 /// The gateway collects these after each `handle` or `tick` call and acts on them - sending
 /// frames, routing messages, closing sockets.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConnectionEvent<const UDS_MAX_FRAME: usize> {
+pub enum ConnectionAction<const UDS_MAX_FRAME: usize> {
     /// Send this `RoutingActivationResponse` frame back to the tester.
     SendActivationResponse(RoutingActivationResponse),
 
@@ -75,12 +76,6 @@ pub enum ConnectionEvent<const UDS_MAX_FRAME: usize> {
         source_address: u16,
         target_address: u16,
         uds_data: heapless::Vec<u8, UDS_MAX_FRAME>,
-    },
-
-    /// Send a `DiagnosticMessageAck` back to the tester.
-    SendDiagnosticAck {
-        source_address: u16,
-        target_address: u16,
     },
 
     /// Send a `DiagnosticMessageNack` back to the tester.
@@ -100,7 +95,7 @@ pub enum ConnectionEvent<const UDS_MAX_FRAME: usize> {
     Close,
 }
 
-// endregion: ConnectionEvent
+// endregion: ConnectionAction
 
 // region: ConnectionState
 
@@ -112,7 +107,7 @@ pub enum ConnectionEvent<const UDS_MAX_FRAME: usize> {
 pub struct ConnectionState<
     // region: ConnectionState Constants
     const UDS_MAX_FRAME: usize,
-    const CONNECTION_MAX_EVENTS: usize,
+    const CONNECTION_MAX_ACTIONS: usize,
     // endregion: ConnectionState Constants
 
     // region: ActivationState Constants
@@ -125,16 +120,16 @@ pub struct ConnectionState<
     phase: ConnectionPhase,
     activation: ActivationStateMachine<MAX_TESTERS, MAX_ACTIVATION_TYPES, A>,
     last_rx: Instant,
-    events: heapless::Vec<ConnectionEvent<UDS_MAX_FRAME>, CONNECTION_MAX_EVENTS>,
+    actions: heapless::Vec<ConnectionAction<UDS_MAX_FRAME>, CONNECTION_MAX_ACTIONS>,
 }
 
 impl<
-        const UDS_MAX_FRAME: usize,
-        const CONNECTION_MAX_EVENTS: usize,
-        const MAX_TESTERS: usize,
-        const MAX_ACTIVATION_TYPES: usize,
-        A: ActivationAuthProvider,
-    > ConnectionState<UDS_MAX_FRAME, CONNECTION_MAX_EVENTS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>
+    const UDS_MAX_FRAME: usize,
+    const CONNECTION_MAX_ACTIONS: usize,
+    const MAX_TESTERS: usize,
+    const MAX_ACTIVATION_TYPES: usize,
+    A: ActivationAuthProvider,
+> ConnectionState<UDS_MAX_FRAME, CONNECTION_MAX_ACTIONS, MAX_TESTERS, MAX_ACTIVATION_TYPES, A>
 {
     pub fn new(
         config: ConnectionConfig,
@@ -146,7 +141,7 @@ impl<
             phase: ConnectionPhase::Connected,
             activation,
             last_rx: now,
-            events: heapless::Vec::new(),
+            actions: heapless::Vec::new(),
         }
     }
 
@@ -164,22 +159,42 @@ impl<
     ///
     /// The caller has already validated the DoIP header and decoded the payload type. This method
     /// receives the payload bytes and the already-decoded payload type for dispatch.
-    pub fn handle(&mut self, payload_type: &PayloadType, payload_data: &[u8], now: Instant) {
+    pub fn handle(
+        &mut self,
+        payload_type: &PayloadType,
+        payload_data: &[u8],
+        now: Instant,
+    ) -> Result<(), DoipError> {
         self.last_rx = now;
 
         match payload_type {
             PayloadType::RoutingActivationRequest => self.on_routing_activation(payload_data),
             PayloadType::DiagnosticMessage => self.on_diagnostic_message(payload_data),
             PayloadType::AliveCheckRequest => self.on_alive_check_request(),
-            PayloadType::AliveCheckResponse => self.on_alive_check_response(),
+            PayloadType::AliveCheckResponse => {
+                self.on_alive_check_response();
+                Ok(())
+            }
 
             // Other payload types - not handled at connection level
-            _ => {}
+            _ => Ok(()),
         }
     }
 
+    /// Queues an action for the caller to perform.
+    ///
+    /// Fails rather than dropping. Every variant of [`ConnectionAction`] is something
+    /// the caller *must* do for the connection to stay in step - close it, ack it,
+    /// nack it, forward it - so a silently discarded action desynchronises the caller
+    /// from this state machine with no signal.
+    fn emit(&mut self, action: ConnectionAction<UDS_MAX_FRAME>) -> Result<(), DoipError> {
+        self.actions
+            .push(action)
+            .map_err(|_| DoipError::ActionQueueFull)
+    }
+
     /// Advances connection timers - idle timeout and alive check timeout.
-    pub fn tick(&mut self, now: Instant) {
+    pub fn tick(&mut self, now: Instant) -> Result<(), DoipError> {
         match &self.phase {
             ConnectionPhase::Active => {
                 let idle = now
@@ -188,7 +203,7 @@ impl<
 
                 if idle > self.config.idle_timeout {
                     self.phase = ConnectionPhase::AliveCheckPending { sent_at: now };
-                    let _ = self.events.push(ConnectionEvent::SendAliveCheckRequest);
+                    self.emit(ConnectionAction::SendAliveCheckRequest)?;
                 }
             }
             ConnectionPhase::AliveCheckPending { sent_at } => {
@@ -198,58 +213,61 @@ impl<
 
                 if elapsed > self.config.alive_check_timeout {
                     self.phase = ConnectionPhase::Closing;
-                    let _ = self.events.push(ConnectionEvent::Close);
+                    self.emit(ConnectionAction::Close)?;
                 }
             }
             _ => {}
         }
+
+        Ok(())
     }
 
     /// Drops the activation line - models ignition off or power loss mid-session.
-    pub fn drop_activation_line(&mut self, reason: ActivationDenialReason) {
+    pub fn drop_activation_line(
+        &mut self,
+        reason: ActivationDenialReason,
+    ) -> Result<(), DoipError> {
         self.activation.drop_line(reason);
         self.phase = ConnectionPhase::Closing;
-        let _ = self.events.push(ConnectionEvent::Close);
+        self.emit(ConnectionAction::Close)
     }
 
-    /// Drains accumulated connection events.
-    pub fn drain_events(&mut self) -> impl Iterator<Item = ConnectionEvent<UDS_MAX_FRAME>> + '_ {
-        self.events.drain(..)
+    /// Drains accumulated actions for the caller to perform.
+    pub fn drain_actions(&mut self) -> impl Iterator<Item = ConnectionAction<UDS_MAX_FRAME>> + '_ {
+        self.actions.drain(..)
     }
 
     // endregion: Public surface
 
     // region: Frame handlers
 
-    fn on_routing_activation(&mut self, payload_data: &[u8]) {
+    fn on_routing_activation(&mut self, payload_data: &[u8]) -> Result<(), DoipError> {
         let mut cursor = payload_data;
         let req = match RoutingActivationRequest::decode(&mut cursor) {
             Ok(r) => r,
             Err(_) => {
                 // Malformed activation request - close connection
                 self.phase = ConnectionPhase::Closing;
-                let _ = self.events.push(ConnectionEvent::Close);
-                return;
+                return self.emit(ConnectionAction::Close);
             }
         };
 
         let resp = self.activation.process_request(&req);
 
-        let _ = self
-            .events
-            .push(ConnectionEvent::SendActivationResponse(resp));
+        self.emit(ConnectionAction::SendActivationResponse(resp))?;
 
         if self.activation.state.is_active() {
             self.phase = ConnectionPhase::Active;
+            Ok(())
         } else {
             self.phase = ConnectionPhase::Closing;
-            let _ = self.events.push(ConnectionEvent::Close);
+            self.emit(ConnectionAction::Close)
         }
     }
 
-    fn on_diagnostic_message(&mut self, payload_data: &[u8]) {
+    fn on_diagnostic_message(&mut self, payload_data: &[u8]) -> Result<(), DoipError> {
         let source = u16::from_be_bytes([
-            payload_data.get(0).copied().unwrap_or(0),
+            payload_data.first().copied().unwrap_or(0),
             payload_data.get(1).copied().unwrap_or(0),
         ]);
         let target = u16::from_be_bytes([
@@ -258,59 +276,58 @@ impl<
         ]);
 
         if !self.is_active() {
-            let _ = self.events.push(ConnectionEvent::SendDiagnosticNack {
+            return self.emit(ConnectionAction::SendDiagnosticNack {
                 source_address: source,
                 target_address: target,
                 nack_code: DiagnosticNackCode::InvalidSourceAddress,
             });
-            return;
         }
 
         if self.activation.state.active_source_address() != Some(source) {
-            let _ = self.events.push(ConnectionEvent::SendDiagnosticNack {
+            return self.emit(ConnectionAction::SendDiagnosticNack {
                 source_address: source,
                 target_address: target,
                 nack_code: DiagnosticNackCode::InvalidSourceAddress,
             });
-            return;
         }
 
         let uds_bytes = payload_data.get(4..).unwrap_or(&[]);
 
         if uds_bytes.is_empty() {
-            let _ = self.events.push(ConnectionEvent::SendDiagnosticNack {
+            return self.emit(ConnectionAction::SendDiagnosticNack {
                 source_address: source,
                 target_address: target,
                 nack_code: DiagnosticNackCode::TransportProtocolError,
             });
-            return;
         }
 
         let mut uds_data: heapless::Vec<u8, UDS_MAX_FRAME> = heapless::Vec::new();
 
         if uds_data.extend_from_slice(uds_bytes).is_err() {
-            let _ = self.events.push(ConnectionEvent::SendDiagnosticNack {
+            return self.emit(ConnectionAction::SendDiagnosticNack {
                 source_address: source,
                 target_address: target,
                 nack_code: DiagnosticNackCode::OutOfMemory,
             });
-            return;
         }
 
-        let _ = self.events.push(ConnectionEvent::SendDiagnosticAck {
-            source_address: source,
-            target_address: target,
-        });
-
-        let _ = self.events.push(ConnectionEvent::ForwardToEcu {
+        // Deliberately does NOT acknowledge here.
+        //
+        // A DoIP acknowledgement states the message was accepted for processing, which
+        // is only known once whoever handles `ForwardToEcu` has established it can route
+        // the request. Emitting the ack first meant a tester was told its request had
+        // been accepted and could then be refused for the same request - and on a
+        // functionally addressed request it claimed every ECU had received something
+        // most of them had not. The ack is now the caller's answer to the forward.
+        self.emit(ConnectionAction::ForwardToEcu {
             source_address: source,
             target_address: target,
             uds_data,
-        });
+        })
     }
 
-    fn on_alive_check_request(&mut self) {
-        let _ = self.events.push(ConnectionEvent::SendAliveCheckResponse);
+    fn on_alive_check_request(&mut self) -> Result<(), DoipError> {
+        self.emit(ConnectionAction::SendAliveCheckResponse)
     }
 
     fn on_alive_check_response(&mut self) {

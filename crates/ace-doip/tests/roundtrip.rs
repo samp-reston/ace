@@ -13,9 +13,9 @@
 // generate structurally valid DoIP frames.
 
 #[cfg(feature = "alloc")]
-use ace_core::codec::FrameWrite;
-#[cfg(feature = "alloc")]
 use ace_core::FrameRead;
+#[cfg(feature = "alloc")]
+use ace_core::codec::FrameWrite;
 #[cfg(feature = "alloc")]
 use ace_doip::message::*;
 #[cfg(feature = "alloc")]

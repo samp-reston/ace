@@ -1,6 +1,9 @@
-# aced
+# ace-api
 
 **Batteries-included entry point for the ACE diagnostics stack.**
+
+> Published on crates.io as **`ace-api`**; imported in code as **`aced`** (the
+> library name). Depend on `ace-api` in `Cargo.toml`, then `use aced::…`.
 
 `aced` re-exports the full `ace-*` crate family - core codec traits, UDS, DoIP,
 CAN/ISO-TP, simulation, client, server, and gateway - behind a single
@@ -16,7 +19,7 @@ crate and depend on the individual `ace-*` crates directly instead (see
 
 ```toml
 [dependencies]
-aced = "0.4"
+ace-api = "0.6.0"
 ```
 
 That's it - no `[features]` section required. `alloc` is on by default, so
@@ -29,8 +32,8 @@ inline storage.
 use aced::uds::UdsClient;
 use aced::doip::DoipGateway;
 
-// ace::core, ace::macros, ace::proto, ace::can, ace::sim,
-// ace::client, ace::server, and ace::gateway are all available the same way.
+// aced::core, aced::macros, aced::proto, aced::can, aced::sim,
+// aced::client, aced::server, and aced::gateway are all available the same way.
 ```
 
 ## Why alloc-by-default here, but not in the underlying crates
@@ -55,26 +58,26 @@ targeting a constrained environment):
 
 ```toml
 [dependencies]
-aced = { version = "0.4", default-features = false }
+ace-api = { version = "0.6.0", default-features = false }
 ```
 
 ## Crates in this workspace
 
 `aced` re-exports each of the following under a matching module name
-(`ace::core`, `ace::uds`, etc.):
+(`aced::core`, `aced::uds`, etc.):
 
 | Module | Crate | Description |
 |---|---|---|
-| `ace::core` | [`ace-core`](https://crates.io/crates/ace-core) | Foundation layer - `FrameRead`, `FrameWrite`, `Writer` codec traits everything else builds on. |
-| `ace::macros` | [`ace-macros`](https://crates.io/crates/ace-macros) | Proc-macro crate providing `FrameCodec`, which derives `FrameRead`/`FrameWrite` for structs and enums. |
-| `ace::proto` | [`ace-proto`](https://crates.io/crates/ace-proto) | Raw, protocol-agnostic frame wrappers - UDS, DoIP, and CAN frames, with mutable variants. |
-| `ace::can` | [`ace-can`](https://crates.io/crates/ace-can) | ISO-TP implementation - reassembler and segmenter bridging DoIP UDS payloads to CAN frames. |
-| `ace::sim` | [`ace-sim`](https://crates.io/crates/ace-sim) | Deterministic simulation infrastructure for reproducibly testing protocol state machines. |
-| `ace::uds` | [`ace-uds`](https://crates.io/crates/ace-uds) | UDS typed message layer implementing ISO 14229-1. |
-| `ace::doip` | [`ace-doip`](https://crates.io/crates/ace-doip) | DoIP typed message and session layer implementing ISO 13400-2. |
-| `ace::client` | [`ace-client`](https://crates.io/crates/ace-client) | UDS tester client state machine. |
-| `ace::server` | [`ace-server`](https://crates.io/crates/ace-server) | UDS ECU server state machine - session management, security access, timing, periodic DIDs, NRCs. |
-| `ace::gateway` | [`ace-gateway`](https://crates.io/crates/ace-gateway) | DoIP gateway, ISO-TP bridge node, and DoIP tester. |
+| `aced::core` | [`ace-core`](https://crates.io/crates/ace-core) | Foundation layer - `FrameRead`, `FrameWrite`, `Writer` codec traits everything else builds on. |
+| `aced::macros` | [`ace-macros`](https://crates.io/crates/ace-macros) | Proc-macro crate providing `FrameCodec`, which derives `FrameRead`/`FrameWrite` for structs and enums. |
+| `aced::proto` | [`ace-proto`](https://crates.io/crates/ace-proto) | Raw, protocol-agnostic frame wrappers - UDS, DoIP, and CAN frames, with mutable variants. |
+| `aced::can` | [`ace-can`](https://crates.io/crates/ace-can) | ISO-TP implementation - reassembler and segmenter bridging DoIP UDS payloads to CAN frames. |
+| `aced::sim` | [`ace-sim`](https://crates.io/crates/ace-sim) | Deterministic simulation infrastructure for reproducibly testing protocol state machines. |
+| `aced::uds` | [`ace-uds`](https://crates.io/crates/ace-uds) | UDS typed message layer implementing ISO 14229-1. |
+| `aced::doip` | [`ace-doip`](https://crates.io/crates/ace-doip) | DoIP typed message and session layer implementing ISO 13400-2. |
+| `aced::client` | [`ace-client`](https://crates.io/crates/ace-client) | UDS tester client state machine. |
+| `aced::server` | [`ace-server`](https://crates.io/crates/ace-server) | UDS ECU server state machine - session management, security access, timing, periodic DIDs, NRCs. |
+| `aced::gateway` | [`ace-gateway`](https://crates.io/crates/ace-gateway) | DoIP gateway, ISO-TP bridge node, and DoIP tester. |
 
 Each of these crates is also independently published and can be depended on
 directly.
@@ -87,8 +90,8 @@ false`:
 
 ```toml
 [dependencies]
-ace-core = { version = "0.4", default-features = false }
-ace-uds  = { version = "0.4", default-features = false }
+ace-core = { version = "0.6.0", default-features = false }
+ace-uds  = { version = "0.6.0", default-features = false }
 ```
 
 In this mode, bounded collections are backed by `heapless::Vec`, with

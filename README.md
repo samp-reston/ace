@@ -6,7 +6,7 @@ A `no_std`-first Rust workspace for automotive diagnostic communication. Impleme
 
 ## Design principles
 
-**`no_std` by default.** Every protocol crate compiles on bare-metal targets with no heap allocator. `alloc` and `std` are opt-in features. All buffers are statically sized via const generics.
+**`no_std` by default.** Every protocol crate compiles on bare-metal targets with no heap allocator. `alloc` and `std` are opt-in features. All buffers are statically sized via const generics. This is verified by building each crate for `thumbv7em-none-eabihf` with default features off — a host build with `--no-default-features` does not prove it, because the host still has `std` available for a dependency to reach.
 
 **Zero-copy.** Frame parsing operates on borrowed byte slices. No allocation occurs in the decode path. Payload references carry the lifetime of the original receive buffer.
 
@@ -20,21 +20,47 @@ A `no_std`-first Rust workspace for automotive diagnostic communication. Impleme
 
 ```
 ace/
+├── ace-api         - Batteries-included facade (alloc-enabled; not for embedded)
 ├── ace-can         - ISO-TP reassembler and segmenter (ISO 15765-2)
 ├── ace-client      - UDS tester client state machine
-├── ace-core        - Codec traits, error types, primitive impls
+├── ace-core        - Foundation: codec traits, storage, time, addressing, node
 ├── ace-doip        - DoIP typed message and session layer (ISO 13400-2)
 ├── ace-gateway     - DoIP gateway, ISO-TP bridge, DoIP tester
 ├── ace-macros      - Proc-macro derives: FrameRead, FrameWrite, FrameCodec
 ├── ace-proto       - Raw frame types: UdsFrame, DoipFrame, CAN frames
 ├── ace-server      - UDS ECU server state machine
 ├── ace-sim         - Deterministic simulation infrastructure
-└── ace-tests       - DST property tests for the full stack
+├── ace-tests       - DST property tests for the full stack
 ├── ace-transport   - Production OS transport (std, TCP/UDP)
-├── ace-uds         - UDS typed message layer (ISO 14229-1)
+└── ace-uds         - UDS typed message layer (ISO 14229-1)
 ```
 
+Not every consumer needs all of it. See
+[`docs/consumer-subsets.md`](docs/consumer-subsets.md) for the verified minimal
+dependency set per consumer — bare-metal ECU server, tester client, gateway, or
+the hosted demonstration — and for how each subset is proved against a real
+bare-metal target.
+
 ---
+
+## Runnable examples
+
+The published library layers each include a small host-runnable example that uses the crate
+directly with default features disabled:
+
+| Consumer layer | Command |
+|---|---|
+| Core codec | `cargo run -p ace-core --example codec --no-default-features` |
+| ISO-TP/CAN | `cargo run -p ace-can --example segmenter --no-default-features` |
+| UDS client | `cargo run -p ace-client --example request --no-default-features` |
+| UDS server | `cargo run -p ace-server --example server --no-default-features` |
+| DoIP | `cargo run -p ace-doip --example header --no-default-features` |
+| Gateway | `cargo run -p ace-gateway --example configure --no-default-features` |
+| Simulation trace/replay | `cargo run -p ace-sim --example trace_replay --no-default-features` |
+
+These examples are intentionally small: they show the public construction boundary for each
+subset, while the full multi-node behavior remains in the workspace-level `ace-tests`
+demonstration.
 
 ## Crate reference
 
@@ -46,7 +72,21 @@ Foundation layer. Defines the three codec traits that everything else builds on:
 - `FrameWrite` - encode into a `Writer` (either `&mut [u8]` or `BytesMut`)
 - `Writer` - sealed trait abstracting alloc and no-alloc write targets
 
-Also provides `DiagError`, `AddressMode`, `DiagnosticAddress`, and the `FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
+It also owns the abstractions every consumer needs regardless of whether a
+simulator is present:
+
+- `clock` - `Instant`, `Duration`, and the `Clock` trait
+- `io` - `NodeAddress`, `RawMessage`, `LinkEvent`, `FrameTransport`, `MessageTransport`
+- `node` - `DiagnosticNode`, the interface an external scheduler (or a bare-metal
+  main loop) uses to drive one diagnostic peer
+- `rng` - the `Rng` trait
+
+Concrete implementations of those live with their consumer: `ace-sim` supplies a
+virtual clock and seeded RNG, an embedded integrator supplies a hardware timer and
+entropy source. Nothing in a production build depends on `ace-sim`.
+
+Also provides `CodecError`, `AddressMode`, `DiagnosticAddress`, and the
+`FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
 
 ```toml
 [dependencies]
@@ -290,36 +330,22 @@ client.unsubscribe_periodic(0x90);
 
 ### `ace-sim`
 
-Deterministic simulation infrastructure. Everything needed to test protocol state machines reproducibly.
+Deterministic simulation infrastructure for reproducibly testing protocol state machines.
 
-**`SimBus<N, Q>`** - message delivery with fault injection. Seeded RNG makes every run reproducible. Configurable faults: message loss, reorder, delay, corruption, timeout.
+- **`SimBus<N, Q>`** - bounded seeded message delivery with probabilistic and scripted faults.
+- **`TcpSimBus`** - connection-oriented delivery with bounded per-pair connections and TCP faults.
+- **`CanSimBus`** - connectionless delivery with CAN state, arbitration, bit-error, and bus-off faults.
+- **`SimNodeErased<N, Q>`** - object-safe node surface for heterogeneous simulation participants.
+- **`SimRunner<N, Q>`** - drives heterogeneous nodes over a generic `SimBus`.
+- **`TwoTierRunner`** - composes an outer bus, inner bus, and role-based bridges without knowing
+  whether the transports are DoIP, CAN, or another layered protocol.
+- **`TraceBus` / `TraceReplay`** - capture bounded bus operations and replay their observable
+  outputs without consulting RNG or fault configuration.
+- **`FaultPlan`** - deterministic one-shot drop, delay, duplicate, and opaque byte-replacement
+  actions. Protocol-specific faulty peers remain a future testkit concern.
 
-**`TcpSimBus<N, Q>`** - wraps `SimBus` and adds TCP connection state. The bus owns connection state — nodes don't track it. TCP fault injection: connection refused, mid-session reset, connect timeout.
-
-**`CanSimBus<N, Q>`** - wraps `SimBus` and adds CAN bus state (Active / ErrorPassive / BusOff). CAN fault injection: arbitration loss, bit error, bus-off.
-
-**`SimNode<N, Q>`** - trait for nodes on the simulation buses:
-
-```rust
-pub trait SimNode<const N: usize, const Q: usize> {
-    type Error: core::fmt::Debug;
-    fn address(&self) -> &NodeAddress;
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) -> Result<(), Self::Error>;
-    fn tick(&mut self, now: Instant) -> Result<(), Self::Error>;
-    fn drain_outbox(&mut self, out: &mut Vec<(NodeAddress, Vec<u8, N>), Q>) -> usize;
-}
-```
-
-**`SimNodeErased<N, Q>`** - object-safe version with errors swallowed internally, enabling heterogeneous slices of different node types.
-
-**`SimRunner<N, Q>`** - drives `SimNodeErased` slices over a `SimBus`.
-
-**`TcpSimRunner<N, Q>`** - drives nodes over a `TcpSimBus`, additionally delivering `TcpEvent`s to nodes implementing `TcpEventHandler`.
-
-**`CanSimRunner<N, Q>`** - drives nodes over a `CanSimBus`, additionally delivering `CanEvent`s to nodes implementing `CanEventHandler`.
-
-**`FaultConfig`** - three presets: `none()`, `light()`, `chaos()`. All probabilities are `(numerator, denominator)` pairs for reproducibility.
-
+All clocks are virtual and all buffers are bounded. The crate builds with `no_std`; `alloc` is an
+opt-in storage feature.
 ---
 
 ### `ace-gateway`

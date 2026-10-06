@@ -1,6 +1,6 @@
-use crate::message::DiagError;
-use crate::message::{FrameRead, FrameWrite};
 use crate::UdsError;
+use crate::message::CodecError;
+use crate::message::{FrameRead, FrameWrite};
 use ace_macros::{FrameCodec, FrameWrite};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameWrite)]
@@ -32,7 +32,7 @@ impl<'a> FrameRead<'a> for SecuredDataTransmissionRequest<'a> {
             *buf = &[];
             (&[][..], remaining)
         } else if remaining.len() < sig_len {
-            return Err(UdsError::from(DiagError::LengthMismatch {
+            return Err(UdsError::from(CodecError::LengthMismatch {
                 expected: sig_len,
                 actual: remaining.len(),
             }));
@@ -68,7 +68,7 @@ impl<'a> FrameRead<'a> for SecuredDataTransmissionResponse<'a> {
         // Byte 7 is the internal message SID - 0x7F means negative response.
         // Minimum 8 bytes required to peek at it.
         if buf.len() <= 7 {
-            return Err(UdsError::from(DiagError::LengthMismatch {
+            return Err(UdsError::from(CodecError::LengthMismatch {
                 expected: 8,
                 actual: buf.len(),
             }));
@@ -125,7 +125,7 @@ impl<'a> FrameRead<'a> for PositiveInternalMessageResponse<'a> {
             *buf = &[];
             (&[][..], remaining)
         } else if remaining.len() < sig_len {
-            return Err(UdsError::from(DiagError::LengthMismatch {
+            return Err(UdsError::from(CodecError::LengthMismatch {
                 expected: sig_len,
                 actual: remaining.len(),
             }));

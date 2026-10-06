@@ -22,16 +22,16 @@
 //! out at the old deadline, and must time out at the new (correctly
 //! converted) one.
 
+use ace_core::clock::{Duration, Instant};
 use ace_core::codec::FrameWrite;
 use ace_doip::header::{DoipHeader, PayloadType, ProtocolVersion};
 use ace_doip::payload::{ActivationCode, RoutingActivationResponse};
 use ace_gateway::tester::{DoipConnection, DoipConnectionConfig, DoipTesterEvent};
-use ace_sim::clock::{Duration, Instant};
 
 const MAX_TARGETS: usize = 4;
 const TCP_MAX_FRAME: usize = 256;
 const TCP_MAX_OUTBOX: usize = 8;
-const MAX_CONNECTION_EVENTS: usize = 16;
+const MAX_CONNECTION_ACTIONS: usize = 16;
 const PENDING: usize = 4;
 const SIM_MAX_FRAME: usize = 256;
 const SIM_MAX_OUTBOX: usize = 8;
@@ -43,7 +43,7 @@ type Connection = DoipConnection<
     MAX_TARGETS,
     TCP_MAX_FRAME,
     TCP_MAX_OUTBOX,
-    MAX_CONNECTION_EVENTS,
+    MAX_CONNECTION_ACTIONS,
     PENDING,
     SIM_MAX_FRAME,
     SIM_MAX_OUTBOX,
@@ -130,8 +130,8 @@ fn dsc_positive_response() -> [u8; 6] {
 }
 
 fn new_connection() -> Connection {
-    let config = DoipConnectionConfig::new(ECU_ADDRESS)
-        .with_timing_tolerance(Duration::from_millis(0)); // verbatim, for a precise assertion
+    let config =
+        DoipConnectionConfig::new(ECU_ADDRESS).with_timing_tolerance(Duration::from_millis(0)); // verbatim, for a precise assertion
     let mut config = config;
     config.default_p2 = Duration::from_millis(DEFAULT_P2_MS);
     DoipConnection::new(TESTER_ADDRESS, config)
@@ -142,13 +142,16 @@ fn activate(conn: &mut Connection, now: Instant) {
     let frame = routing_activation_success_frame(TESTER_ADDRESS, ECU_ADDRESS);
     conn.handle(&frame, now)
         .expect("activation frame should be accepted");
-    assert!(conn.is_active(), "connection should be Active after activation");
+    assert!(
+        conn.is_active(),
+        "connection should be Active after activation"
+    );
     let _ = conn.drain_events();
 }
 
 fn drain_outbox(conn: &mut Connection) {
     let mut discard: ace_core::Vec<
-        (ace_sim::io::NodeAddress, ace_core::Vec<u8, TCP_MAX_FRAME>),
+        (ace_core::io::NodeAddress, ace_core::Vec<u8, TCP_MAX_FRAME>),
         TCP_MAX_OUTBOX,
     > = ace_core::Vec::new();
     let _ = conn.drain_outbox(&mut discard);
@@ -195,8 +198,10 @@ fn dsc_learned_p2_is_applied_to_the_live_client() {
     // learned P2 (800ms). If the learned value was not applied, this tick
     // will emit Timeout for the second request - proving the defect. If it
     // was applied, no timeout should fire here.
-    now = Instant::from_micros(now.as_micros() + Duration::from_millis(DEFAULT_P2_MS + 50).as_micros());
-    conn.tick(now);
+    now = Instant::from_micros(
+        now.as_micros() + Duration::from_millis(DEFAULT_P2_MS + 50).as_micros(),
+    );
+    conn.tick(now).expect("tick must not fail");
     assert!(
         !saw_timeout(&mut conn),
         "request timed out at the OLD default P2 ({DEFAULT_P2_MS}ms) - the DSC-learned P2 \
@@ -210,7 +215,7 @@ fn dsc_learned_p2_is_applied_to_the_live_client() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(u64::from(DSC_P2_MS) + 100).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         saw_timeout(&mut conn),
         "request never timed out even after exceeding the DSC-learned P2 ({DSC_P2_MS}ms) - \
@@ -257,7 +262,7 @@ fn dsc_p2_star_ten_millisecond_unit_conversion_is_applied() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(DSC_P2EXT_10MS_UNITS as u64 + 50).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         !saw_timeout(&mut conn),
         "request timed out at the UNCONVERTED P2* ({DSC_P2EXT_10MS_UNITS}ms) - the ×10 \
@@ -269,7 +274,7 @@ fn dsc_p2_star_ten_millisecond_unit_conversion_is_applied() {
     now = Instant::from_micros(
         now.as_micros() + Duration::from_millis(DSC_P2EXT_EXPECTED_MS).as_micros(),
     );
-    conn.tick(now);
+    conn.tick(now).expect("tick must not fail");
     assert!(
         saw_timeout(&mut conn),
         "request never timed out even after exceeding the correctly-converted P2* \

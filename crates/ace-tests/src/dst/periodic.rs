@@ -1,12 +1,11 @@
 // region: Imports
 
-use aced::client::event::ClientEvent;
-use aced::sim::clock::Duration;
-use aced::sim::fault::FaultConfig;
+use ace_client::event::ClientEvent;
+use ace_sim::fault::FaultConfig;
 
 use crate::{
     dst::{MAX_TICKS, TICK_MS},
-    harness::{expect_periodic, expect_positive, DstScenario},
+    harness::{DstScenario, expect_periodic, expect_positive},
 };
 
 // endregion: Imports
@@ -18,7 +17,9 @@ fn p1_periodic_data_arrives_at_fast_rate() {
     let mut s = DstScenario::new(0, FaultConfig::none());
 
     // Subscribe client to DID low byte 0x90 (DID 0xF290)
-    s.client.subscribe_periodic(0x90);
+    s.client
+        .subscribe_periodic(0x90)
+        .expect("periodic subscription must be accepted");
 
     // Request fast rate (0x03) for periodic identifier 0x90
     s.client
@@ -42,7 +43,9 @@ fn p1_periodic_data_arrives_at_fast_rate() {
 fn p2_stop_sending_cancels_periodic() {
     let mut s = DstScenario::new(0, FaultConfig::none());
 
-    s.client.subscribe_periodic(0x90);
+    s.client
+        .subscribe_periodic(0x90)
+        .expect("periodic subscription must be accepted");
 
     // Start fast rate
     s.client
@@ -81,7 +84,9 @@ fn p2_stop_sending_cancels_periodic() {
 fn p3_periodic_data_correct_did_and_content() {
     let mut s = DstScenario::new(0, FaultConfig::none());
 
-    s.client.subscribe_periodic(0x90);
+    s.client
+        .subscribe_periodic(0x90)
+        .expect("periodic subscription must be accepted");
 
     s.client
         .request(&[0x2A, 0x03, 0x90], s.runner.bus().now())

@@ -7,13 +7,13 @@
 
 // region: Imports
 
-use aced::can::IsoTpAddressingMode;
-use aced::core::Vec;
-use aced::doip::{
+use ace_can::IsoTpAddressingMode;
+use ace_core::Vec;
+use ace_doip::{
     payload::ActivationType,
     session::{ActivationAuthProvider, ActivationDenialReason},
 };
-use aced::gateway::{
+use ace_gateway::{
     config::{CanNodeEntry, GatewayConfig},
     ecu_node::EcuNode,
     gateway::DoipGateway,
@@ -22,15 +22,20 @@ use aced::gateway::{
         DoipTesterEvent, TargetId,
     },
 };
-use aced::server::{handler::ServerHandler, security_provider::SecurityProvider};
-use aced::sim::{
+use ace_server::{handler::ServerHandler, security_provider::SecurityProvider};
+use ace_sim::{
     can_bus::{CanFaultConfig, CanSimBus},
     clock::Duration,
     io::NodeAddress,
     tcp_bus::{TcpFaultConfig, TcpSimBus},
+    two_tier_runner::TwoTierRunner,
 };
 
-use crate::fixtures::{server::default_server, TestHandler, TestSecurityProvider};
+use crate::fixtures::{
+    TestHandler, TestSecurityProvider,
+    server::default_server,
+    two_tier_adapters::{DoipGatewayAdapter, DoipTesterAdapter, EcuNodeAdapter},
+};
 
 // endregion: Imports
 
@@ -50,7 +55,7 @@ impl ActivationAuthProvider for TestActivationAuthProvider {
         &mut self,
         _source_address: u16,
         _oem_data: &[u8],
-    ) -> Result<(), aced::doip::session::ActivationDenialReason> {
+    ) -> Result<(), ace_doip::session::ActivationDenialReason> {
         Ok(())
     }
 }
@@ -165,7 +170,7 @@ pub struct GatewayEntry<
     const TCP_MAX_OUTBOX: usize,
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const UDS_MAX_FRAME: usize,
     const UDS_MAX_OUTBOX: usize,
@@ -203,7 +208,7 @@ pub struct GatewayEntry<
         MAX_TESTERS,
         MAX_FRAME,
         UDS_MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         MAX_NODES,
         A,
@@ -259,7 +264,7 @@ pub struct DoipDstScenario<
     const ISOTP_MAX_NODES: usize,
     const MAX_TESTERS: usize,
     const MAX_FRAME: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     const MAX_ACTIVATION_TYPES: usize,
     const UDS_MAX_FRAME: usize,
     const UDS_MAX_OUTBOX: usize,
@@ -284,14 +289,23 @@ pub struct DoipDstScenario<
     S: SecurityProvider,
 {
     pub config: DoipScenarioConfig,
-    pub tcp_bus: TcpSimBus<MAX_DATA, MAX_QUEUED, TCP_MAX_EVENTS>,
-    pub can_bus: CanSimBus<CAN_MAX_FRAME, CAN_MAX_OUTBOX>,
+    pub runner: TwoTierRunner<
+        TCP_MAX_FRAME,
+        MAX_QUEUED,
+        TCP_MAX_EVENTS,
+        MAX_GATEWAY_ADDRS,
+        TCP_MAX_OUTBOX,
+        CAN_MAX_FRAME,
+        CAN_MAX_OUTBOX,
+        MAX_EVENTS,
+        CAN_MAX_OUTBOX,
+    >,
     pub tester: DoipTester<
         MAX_GATEWAYS,
         MAX_NODES,
         TCP_MAX_FRAME,
         TCP_MAX_OUTBOX,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         UDS_MAX_OUTBOX,
         TCP_MAX_FRAME,
         TCP_MAX_OUTBOX,
@@ -306,7 +320,7 @@ pub struct DoipDstScenario<
             TCP_MAX_OUTBOX,
             MAX_TESTERS,
             MAX_FRAME,
-            MAX_CONNECTION_EVENTS,
+            MAX_CONNECTION_ACTIONS,
             MAX_ACTIVATION_TYPES,
             UDS_MAX_FRAME,
             UDS_MAX_OUTBOX,
@@ -333,36 +347,36 @@ pub struct DoipDstScenario<
 }
 
 impl<
-        const MAX_DATA: usize,
-        const MAX_QUEUED: usize,
-        const TCP_MAX_EVENTS: usize,
-        const MAX_GATEWAY_ADDRS: usize,
-        const MAX_EVENTS: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const CAN_MAX_FRAME: usize,
-        const CAN_MAX_OUTBOX: usize,
-        const MAX_GATEWAYS: usize,
-        const ISOTP_MAX_NODES: usize,
-        const MAX_TESTERS: usize,
-        const MAX_FRAME: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        const MAX_ACTIVATION_TYPES: usize,
-        const UDS_MAX_FRAME: usize,
-        const UDS_MAX_OUTBOX: usize,
-        const MAX_SESSIONS: usize,
-        const MAX_SERVICES: usize,
-        const MAX_DIDS: usize,
-        const MAX_SECURITY_LEVELS: usize,
-        const MAX_NODES: usize,
-        const DEFAULT_S3: u64,
-        const DEFAULT_P2: u64,
-        const DEFAULT_P2_EXT: u64,
-        const DEFAULT_LOCKOUT: u64,
-        const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
-        const MAX_SEED: usize,
-        const MAX_PERIODIC: usize,
-    >
+    const MAX_DATA: usize,
+    const MAX_QUEUED: usize,
+    const TCP_MAX_EVENTS: usize,
+    const MAX_GATEWAY_ADDRS: usize,
+    const MAX_EVENTS: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const CAN_MAX_FRAME: usize,
+    const CAN_MAX_OUTBOX: usize,
+    const MAX_GATEWAYS: usize,
+    const ISOTP_MAX_NODES: usize,
+    const MAX_TESTERS: usize,
+    const MAX_FRAME: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
+    const MAX_ACTIVATION_TYPES: usize,
+    const UDS_MAX_FRAME: usize,
+    const UDS_MAX_OUTBOX: usize,
+    const MAX_SESSIONS: usize,
+    const MAX_SERVICES: usize,
+    const MAX_DIDS: usize,
+    const MAX_SECURITY_LEVELS: usize,
+    const MAX_NODES: usize,
+    const DEFAULT_S3: u64,
+    const DEFAULT_P2: u64,
+    const DEFAULT_P2_EXT: u64,
+    const DEFAULT_LOCKOUT: u64,
+    const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
+    const MAX_SEED: usize,
+    const MAX_PERIODIC: usize,
+>
     DoipDstScenario<
         MAX_DATA,
         MAX_QUEUED,
@@ -377,7 +391,7 @@ impl<
         ISOTP_MAX_NODES,
         MAX_TESTERS,
         MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         UDS_MAX_FRAME,
         UDS_MAX_OUTBOX,
@@ -444,161 +458,111 @@ impl<
     pub fn connect(&mut self) {
         let tester_addr = self.tester.address();
 
-        let gw_addrs: Vec<NodeAddress, MAX_GATEWAY_ADDRS> = self
-            .gateways
-            .iter()
-            .map(|g| g.gateway_addr.clone())
-            .collect();
+        let gw_addrs: Vec<NodeAddress, MAX_GATEWAY_ADDRS> =
+            Vec::from_iter_checked(self.gateways.iter().map(|g| g.gateway_addr.clone()))
+                .expect("MAX_GATEWAY_ADDRS too small for the configured gateways");
         for gw_addr in gw_addrs {
-            self.tcp_bus.connect(tester_addr.clone(), gw_addr);
+            self.runner
+                .outer_bus()
+                .connect(tester_addr.clone(), gw_addr);
         }
     }
 
-    /// Advances the simulation by on full step.
+    /// Advances the simulation by one full step: one outer (TCP) tick, then
+    /// `can_ticks_per_tcp` inner (CAN) ticks, via `ace_sim::two_tier_runner::TwoTierRunner`.
     ///
-    /// One step = one TCP tick + N CAN ticks.
-    /// Order:
-    ///     1. TCP Bus tick - deliver DoIP frames.
-    ///     2. Route TCP messages to tester or gateway TCP face
-    ///     3. Collect TCP events, notify tester
-    ///     4. Collect gateway TCP outbox -> TCP bus
-    ///     5. Collect gateway CAN outbox -> CAN bus
-    ///     6. N * CAN bus ticks:
-    ///         a. Deliver CAN frames to ISO-TP node
-    ///         b. Collect ISO-TP CAN outbox -> CAN bus
-    ///         c. Route ISO-TP UDS outbox -> UdsServer
-    ///         d. Collect UdsServer outbox -> ISO-TP node
-    ///         e. Route ISO-TP assembled UDS -> gateway CAN face
-    ///         f. Collect gateway TCP outbox -> TCP bus (response path)
+    /// The ordering this used to hand-roll - deliver, notify, tick, offer, relay,
+    /// composed across two buses with the gateway bridging between them - is now the
+    /// runner's contract rather than this fixture's opinion. See
+    /// `crates/ace-sim/src/two_tier_runner.rs` for what it guarantees and why.
     pub fn tick(&mut self) {
-        let tester_addr = self.tester.address().clone();
-        let now = self.tcp_bus.now();
+        let mut tester_adapter = DoipTesterAdapter(&mut self.tester);
 
-        let tcp_delivered = self.tcp_bus.tick(self.config.tcp_tick);
+        let mut gateway_adapters: Vec<
+            DoipGatewayAdapter<
+                '_,
+                CAN_MAX_FRAME,
+                ISOTP_MAX_NODES,
+                TCP_MAX_FRAME,
+                TCP_MAX_OUTBOX,
+                CAN_MAX_OUTBOX,
+                MAX_TESTERS,
+                MAX_FRAME,
+                UDS_MAX_FRAME,
+                MAX_CONNECTION_ACTIONS,
+                MAX_ACTIVATION_TYPES,
+                MAX_NODES,
+                TestActivationAuthProvider,
+            >,
+            MAX_GATEWAYS,
+        > = Vec::new();
 
-        let tcp_events: Vec<_, TCP_MAX_OUTBOX> = self.tcp_bus.drain_events().collect();
-        for event in &tcp_events {
-            self.tester.on_tcp_event(event, now);
-        }
+        let mut ecu_adapters: Vec<
+            EcuNodeAdapter<
+                '_,
+                UDS_MAX_FRAME,
+                UDS_MAX_OUTBOX,
+                CAN_MAX_FRAME,
+                CAN_MAX_OUTBOX,
+                MAX_SESSIONS,
+                MAX_SERVICES,
+                MAX_DIDS,
+                MAX_SECURITY_LEVELS,
+                DEFAULT_S3,
+                DEFAULT_P2,
+                DEFAULT_P2_EXT,
+                DEFAULT_LOCKOUT,
+                DEFAULT_MAX_SECURITY_ATTEMPTS,
+                MAX_SEED,
+                MAX_PERIODIC,
+                TestHandler,
+                TestSecurityProvider,
+            >,
+            MAX_NODES,
+        > = Vec::new();
 
         for gw in self.gateways.iter_mut() {
-            let _ = gw.gateway.tick(now);
-        }
+            let _ = gateway_adapters.push(DoipGatewayAdapter(&mut gw.gateway));
 
-        for envelope in &tcp_delivered {
-            if let Some(gw) = self
-                .gateways
-                .iter_mut()
-                .find(|g| g.gateway_addr == envelope.dst)
-            {
-                let _ = gw.gateway.handle_tcp(&envelope.src, &envelope.data, now);
-            } else if envelope.dst == tester_addr {
-                let _ = self.tester.handle(&envelope.src, &envelope.data, now);
+            for ecu in gw.ecus.iter_mut() {
+                let _ = ecu_adapters.push(EcuNodeAdapter {
+                    address: NodeAddress(ecu.response_can_id),
+                    node: &mut ecu.node,
+                });
             }
         }
 
-        self.tester.tick(now);
+        let mut outer_nodes: [&mut dyn ace_sim::two_tier_runner::OuterNode<TCP_MAX_FRAME, TCP_MAX_OUTBOX>;
+            1] = [&mut tester_adapter];
 
-        let mut tester_out: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX> = Vec::new();
-        self.tester.drain_outbox(&mut tester_out);
-
-        for (dst, data) in &tester_out {
-            self.tcp_bus.send(tester_addr.clone(), dst.clone(), data);
+        let mut inner_nodes: Vec<
+            &mut dyn ace_sim::node::SimNodeErased<CAN_MAX_FRAME, CAN_MAX_OUTBOX>,
+            MAX_NODES,
+        > = Vec::new();
+        for ecu in ecu_adapters.iter_mut() {
+            let _ = inner_nodes.push(ecu);
         }
 
-        for gw in self.gateways.iter_mut() {
-            let mut gw_tcp_out: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX> =
-                Vec::new();
-            gw.gateway.drain_tcp_outbox(&mut gw_tcp_out);
-
-            for (dst, data) in &gw_tcp_out {
-                self.tcp_bus
-                    .send(gw.gateway_addr.clone(), dst.clone(), data);
-            }
-
-            let mut gw_can_out: Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX> =
-                Vec::new();
-            gw.gateway.drain_can_outbox(&mut gw_can_out);
-
-            for (dst, data) in &gw_can_out {
-                self.can_bus
-                    .send(gw.gateway_addr.clone(), dst.clone(), data);
-            }
+        let mut bridges: Vec<
+            &mut dyn ace_sim::two_tier_runner::Bridge<
+                TCP_MAX_FRAME,
+                TCP_MAX_OUTBOX,
+                CAN_MAX_FRAME,
+                CAN_MAX_OUTBOX,
+            >,
+            MAX_GATEWAYS,
+        > = Vec::new();
+        for gw in gateway_adapters.iter_mut() {
+            let _ = bridges.push(gw);
         }
 
-        for _ in 0..self.config.can_ticks_per_tcp {
-            let can_now = self.can_bus.now();
-            let can_delivered = self.can_bus.tick(self.config.can_tick);
-
-            for gw in self.gateways.iter_mut() {
-                for envelope in &can_delivered {
-                    let dst_id = envelope.dst.0;
-                    let src_id = envelope.src.0;
-
-                    if let Some(ecu) = gw.ecus.iter_mut().find(|e| e.request_can_id == dst_id) {
-                        let pci = envelope.data.first().copied().unwrap_or(0);
-                        if pci & 0xF0 == 0x30 && src_id != gw.gateway_addr.0 {
-                            let _ = gw.gateway.handle_can(
-                                &NodeAddress(dst_id),
-                                &envelope.data,
-                                can_now,
-                            );
-                        } else if src_id == gw.gateway_addr.0 {
-                            let _ = ecu.node.handle_can_frame(&envelope.data, can_now);
-                        }
-                    }
-
-                    if let Some(ecu) = gw.ecus.iter_mut().find(|e| e.response_can_id == dst_id) {
-                        let pci = envelope.data.first().copied().unwrap_or(0);
-
-                        if pci & 0xF0 == 0x30 && src_id == gw.gateway_addr.0 {
-                            let _ = ecu.node.handle_can_frame(&envelope.data, can_now);
-                        } else if src_id == ecu.response_can_id {
-                            let _ = gw.gateway.handle_can(
-                                &NodeAddress(dst_id),
-                                &envelope.data,
-                                can_now,
-                            );
-                        }
-                    }
-                }
-
-                for ecu in gw.ecus.iter_mut() {
-                    let _ = ecu.node.tick(can_now);
-                }
-
-                for ecu in gw.ecus.iter_mut() {
-                    let mut ecu_can_out: Vec<
-                        (NodeAddress, Vec<u8, CAN_MAX_FRAME>),
-                        CAN_MAX_OUTBOX,
-                    > = Vec::new();
-                    ecu.node.drain_can_outbox(&mut ecu_can_out);
-
-                    for (dst, data) in &ecu_can_out {
-                        self.can_bus
-                            .send(NodeAddress(ecu.response_can_id), dst.clone(), data);
-                    }
-                }
-
-                let mut gw_can_fc: Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX> =
-                    Vec::new();
-                gw.gateway.drain_can_outbox(&mut gw_can_fc);
-
-                for (dst, data) in &gw_can_fc {
-                    self.can_bus
-                        .send(gw.gateway_addr.clone(), dst.clone(), data);
-                }
-
-                let mut gw_tcp_resp: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX> =
-                    Vec::new();
-                gw.gateway.drain_tcp_outbox(&mut gw_tcp_resp);
-
-                for (dst, data) in &gw_tcp_resp {
-                    self.tcp_bus
-                        .send(gw.gateway_addr.clone(), dst.clone(), data);
-                }
-            }
-        }
+        self.runner.tick(
+            &mut outer_nodes,
+            inner_nodes.as_mut_slice(),
+            bridges.as_mut_slice(),
+            self.config.tcp_tick,
+            self.config.can_tick,
+        );
     }
 
     pub fn tick_n(&mut self, n: usize) {
@@ -635,7 +599,7 @@ impl<
         target_address: u16,
         uds_data: &[u8],
     ) -> Result<(), DoipTesterError> {
-        let now = self.tcp_bus.now();
+        let now = self.runner.outer_bus().now();
         self.tester.request(conn_id, target_address, uds_data, now)
     }
 
@@ -664,23 +628,27 @@ impl<
     pub fn drain_events(
         &mut self,
     ) -> Vec<(ConnectionId, TargetId, DoipTesterEvent<MAX_DATA>), MAX_EVENTS> {
-        self.tester.drain_events().collect()
+        Vec::from_iter_checked(self.tester.drain_events())
+            .expect("event buffer too small for this scenario")
     }
 
     // endregion: Convenience Helpers
 
     pub fn disconnect(&mut self, tester_addr: NodeAddress, gateway_addr: NodeAddress) {
-        self.tcp_bus
+        self.runner
+            .outer_bus()
             .disconnect(tester_addr.clone(), gateway_addr.clone());
 
-        let now = self.tcp_bus.now();
-        self.tester.on_tcp_event(
-            &aced::sim::tcp_bus::TcpEvent::ConnectionReset {
-                from: tester_addr,
-                to: gateway_addr,
-            },
-            now,
-        );
+        let now = self.runner.outer_bus().now();
+        self.tester
+            .on_tcp_event(
+                &ace_sim::tcp_bus::LinkEvent::ConnectionReset {
+                    from: tester_addr,
+                    to: gateway_addr,
+                },
+                now,
+            )
+            .expect("link event must be accepted");
     }
 }
 
@@ -875,7 +843,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
         const ISOTP_MAX_NODES: usize,
         const MAX_TESTERS: usize,
         const MAX_FRAME: usize,
-        const MAX_CONNECTION_EVENTS: usize,
+        const MAX_CONNECTION_ACTIONS: usize,
         const MAX_ACTIVATION_TYPES: usize,
         const UDS_MAX_FRAME: usize,
         const UDS_MAX_OUTBOX: usize,
@@ -907,7 +875,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
         ISOTP_MAX_NODES,
         MAX_TESTERS,
         MAX_FRAME,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         MAX_ACTIVATION_TYPES,
         UDS_MAX_FRAME,
         UDS_MAX_OUTBOX,
@@ -929,6 +897,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
     > {
         let tcp_bus = TcpSimBus::new(self.seed, self.tcp_faults);
         let can_bus = CanSimBus::new(self.seed.wrapping_add(1), self.can_faults);
+        let runner = TwoTierRunner::new(tcp_bus, can_bus, self.tick_config.can_ticks_per_tcp);
 
         let tester_address = self
             .gateways
@@ -944,7 +913,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
                 TCP_MAX_OUTBOX,
                 MAX_TESTERS,
                 MAX_FRAME,
-                MAX_CONNECTION_EVENTS,
+                MAX_CONNECTION_ACTIONS,
                 MAX_ACTIVATION_TYPES,
                 UDS_MAX_FRAME,
                 UDS_MAX_OUTBOX,
@@ -1040,6 +1009,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
                     ecu.logical_address,
                     ecu.request_can_id,
                     ecu.response_can_id,
+                    ecu.functional_can_id,
                     ecu.addressing_mode.clone(),
                     server,
                 );
@@ -1063,8 +1033,7 @@ impl<const MAX_GATEWAYS: usize, const MAX_ECUS: usize>
 
         DoipDstScenario {
             config: self.tick_config,
-            tcp_bus,
-            can_bus,
+            runner,
             tester,
             gateways: gateway_entries,
         }

@@ -38,11 +38,33 @@ pub struct PendingRouteTable<const MAX_PENDING: usize> {
     entries: Vec<PendingRoute, MAX_PENDING>,
 }
 
+impl<const MAX_PENDING: usize> Default for PendingRouteTable<MAX_PENDING> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const MAX_PENDING: usize> PendingRouteTable<MAX_PENDING> {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
         }
+    }
+
+    /// Total routes this table can hold.
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        MAX_PENDING
+    }
+
+    /// How many further routes can be recorded.
+    ///
+    /// Needed to decide a fan-out before performing it: a functionally addressed request
+    /// needs one route per responding ECU, and committing some of them and then running
+    /// out leaves responses that can never be matched back to a tester.
+    #[must_use]
+    pub fn remaining(&self) -> usize {
+        MAX_PENDING.saturating_sub(self.entries.len())
     }
 
     /// Records a forwarded request.
@@ -51,6 +73,13 @@ impl<const MAX_PENDING: usize> PendingRouteTable<MAX_PENDING> {
             return false;
         }
 
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.entries.is_full(),
+            "more entries configured than MAX_ROUTES allows"
+        );
         let _ = self.entries.push(route);
         true
     }

@@ -22,7 +22,7 @@ pub mod constants;
 // Re-exports
 pub use error::{CanError, IsoTpError};
 pub use ext::classic::{CanFrameExt, CanFrameMutExt};
-pub use ext::fd::{dlc_to_len, len_to_dlc, CanFdFrameExt, CanFdFrameMutExt};
+pub use ext::fd::{CanFdFrameExt, CanFdFrameMutExt, dlc_to_len, len_to_dlc};
 pub use isotp::address::IsoTpAddressingMode;
 pub use isotp::pci::{FlowStatus, PciFrame};
 pub use isotp::reassembler::{ReassembleResult, Reassembler, ReassemblerConfig};

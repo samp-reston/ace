@@ -1,5 +1,5 @@
-use crate::{message::FunctionalGroup, UdsError};
-use ace_core::{DiagError, FrameIter};
+use crate::{UdsError, message::FunctionalGroup};
+use ace_core::{CodecError, FrameIter};
 use ace_macros::FrameCodec;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
@@ -559,7 +559,7 @@ impl<'a> ace_core::codec::FrameRead<'a> for DtcStatusMask {
     fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
         let byte = *buf
             .first()
-            .ok_or(UdsError::from(DiagError::LengthMismatch {
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
                 expected: 1,
                 actual: 0,
             }))?;
@@ -590,7 +590,7 @@ impl ace_core::codec::FrameWrite for DtcStatusMask {
             | ((self.test_not_completed_this_operation_cycle as u8) << 6)
             | ((self.warning_indicator_requested as u8) << 7);
 
-        buf.write_bytes(&[byte]).map_err(|e| UdsError::from(e))
+        buf.write_bytes(&[byte]).map_err(UdsError::from)
     }
 }
 

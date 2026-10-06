@@ -1,42 +1,10 @@
-// region: Rng Trait
+//! Seeded generator for reproducible runs. The [`Rng`] trait lives in `ace-core`.
 
-/// A seeded random number generator for deterministic simulation.
-///
-/// All randomness in the simulation must flow through this trait. The same seed must produce the
-/// same sequence of values - this is what makes simulation runs reproducible and replayable.
-pub trait Rng {
-    fn next_u64(&mut self) -> u64;
+// region: Imports
 
-    /// Returns a random `u32`.
-    fn next_u32(&mut self) -> u32 {
-        self.next_u64() as u32
-    }
+pub use ace_core::rng::Rng;
 
-    /// Returns a random `u8`.
-    fn next_u8(&mut self) -> u8 {
-        self.next_u64() as u8
-    }
-
-    // Returns true with probability `numerator / denominator`.
-    fn chance(&mut self, numerator: u32, denominator: u32) -> bool {
-        if denominator == 0 {
-            return false;
-        }
-
-        (self.next_u32() % denominator) < numerator
-    }
-
-    /// Returns a random `usize` in `0..len`.
-    fn index(&mut self, len: usize) -> usize {
-        if len == 0 {
-            return 0;
-        }
-
-        (self.next_u64() as usize) % len
-    }
-}
-
-// endregion: Rng Trait
+// endregion: Imports
 
 // region: XorShift64
 

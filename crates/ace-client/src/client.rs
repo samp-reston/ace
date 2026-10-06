@@ -1,12 +1,13 @@
 // region: Imports
 
 use ace_core::Vec;
-use ace_proto::{common::RawFrame, UdsFrame};
-use ace_sim::clock::{Duration, Instant};
-use ace_sim::io::NodeAddress;
+use ace_core::clock::{Duration, Instant};
+use ace_core::io::{InboundFrame, NodeAddress};
+use ace_core::storage::CapacityError;
+use ace_proto::{UdsFrame, common::RawFrame};
 use ace_uds::ext::UdsFrameExt;
 
-use crate::{config::ClientConfig, event::ClientEvent, pending::PendingRequest, ClientError};
+use crate::{ClientError, config::ClientConfig, event::ClientEvent, pending::PendingRequest};
 
 // endregion: Imports
 
@@ -39,19 +40,24 @@ pub struct UdsClient<
 }
 
 impl<
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    > UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+> UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
     pub fn new(config: ClientConfig, address: NodeAddress) -> Self {
+        let configured_address = NodeAddress(u32::from(config.physical_address));
+        debug_assert_eq!(
+            address, configured_address,
+            "UdsClient address must match ClientConfig::physical_address"
+        );
         let server = NodeAddress(config.target_address as u32);
         Self {
             config,
-            address,
+            address: configured_address,
             server,
             pending: Vec::new(),
             outbox: Vec::new(),
@@ -98,12 +104,22 @@ impl<
     /// Periodic classification must precede positive response classification because a periodic
     /// DID low byte could theoretically have bit 6 set. Explicit subscription registry takes
     /// priority.
-    pub fn handle(
-        &mut self,
-        _src: &NodeAddress,
-        data: &[u8],
-        now: Instant,
-    ) -> Result<(), ClientError> {
+    pub fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant) -> Result<(), ClientError> {
+        // A response has to be for this client, and from the server this client addressed.
+        //
+        // Both were previously ignored. On a shared segment that is not survivable: every
+        // frame reaches every node, so a client accepting whatever it was handed would match
+        // another tester's response to its own pending request - completing it with a payload
+        // meant for somebody else, which is worse than the timeout it should have had.
+        //
+        // Requires a physically addressed target, which is what `ClientConfig` documents both
+        // of its addresses to be. A client addressing a functional group would receive
+        // responses from individual servers and could not use the source check.
+        if frame.dst.0 != self.address.0 || frame.src.0 != self.server.0 {
+            return Ok(());
+        }
+
+        let data = frame.data;
         // Nothing to do for empty frames
         let first = match data.first().copied() {
             Some(b) => b,
@@ -133,10 +149,10 @@ impl<
 
             self.complete_pending(requested_sid);
 
-            let _ = self.events.push(ClientEvent::NegativeResponse {
+            self.emit(ClientEvent::NegativeResponse {
                 sid: requested_sid,
                 nrc,
-            });
+            })?;
 
             return Ok(());
         }
@@ -154,12 +170,13 @@ impl<
             let raw = frame.as_bytes();
             let record = raw.get(1..).unwrap_or(&[]);
             let mut buf: Vec<u8, MAX_DATA> = Vec::new();
-            let _ = buf.extend_from_slice(&record[..record.len().min(MAX_DATA)]);
+            buf.extend_from_slice(record)
+                .map_err(|_| ClientError::FrameTooLong)?;
 
-            let _ = self.events.push(ClientEvent::PeriodicData {
+            self.emit(ClientEvent::PeriodicData {
                 did: first,
                 data: buf,
-            });
+            })?;
 
             return Ok(());
         }
@@ -176,12 +193,13 @@ impl<
             if self.complete_pending(request_sid) {
                 let payload = frame.payload();
                 let mut buf: Vec<u8, MAX_DATA> = Vec::new();
-                let _ = buf.extend_from_slice(&payload[..payload.len().min(MAX_DATA)]);
+                buf.extend_from_slice(payload)
+                    .map_err(|_| ClientError::FrameTooLong)?;
 
-                let _ = self.events.push(ClientEvent::PositiveResponse {
+                self.emit(ClientEvent::PositiveResponse {
                     sid: request_sid,
                     data: buf,
-                });
+                })?;
 
                 return Ok(());
             }
@@ -196,9 +214,10 @@ impl<
         {
             let raw = frame.as_bytes();
             let mut buf: Vec<u8, MAX_DATA> = Vec::new();
-            let _ = buf.extend_from_slice(&raw[..raw.len().min(MAX_DATA)]);
+            buf.extend_from_slice(raw)
+                .map_err(|_| ClientError::FrameTooLong)?;
 
-            let _ = self.events.push(ClientEvent::Unsolicited { data: buf });
+            self.emit(ClientEvent::Unsolicited { data: buf })?;
         }
 
         // endregion: Unsolicited
@@ -212,13 +231,15 @@ impl<
 
         for p in self.pending.iter() {
             if p.is_expired(now) {
-                let _ = expired.push(p.sid);
+                expired
+                    .push(p.sid)
+                    .map_err(|_| ClientError::EventQueueFull)?;
             }
         }
 
         for sid in expired {
             self.complete_pending(sid);
-            let _ = self.events.push(ClientEvent::Timeout { sid });
+            self.emit(ClientEvent::Timeout { sid })?;
         }
 
         Ok(())
@@ -228,14 +249,21 @@ impl<
     pub fn drain_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, SIM_MAX_FRAME>), SIM_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.outbox.len();
 
         for item in self.outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     // endregion: SimNode Surface
@@ -259,16 +287,20 @@ impl<
         }
 
         let mut frame: Vec<u8, SIM_MAX_FRAME> = Vec::new();
-        let _ = frame.extend_from_slice(data);
+        frame
+            .extend_from_slice(data)
+            .map_err(|_| ClientError::OutboxFull)?;
 
-        if self.outbox.len() >= SIM_MAX_OUTBOX {
-            return Err(ClientError::OutboxFull);
-        }
-        let _ = self.outbox.push((self.server.clone(), frame));
+        self.outbox
+            .push((self.server.clone(), frame))
+            .map_err(|_| ClientError::OutboxFull)?;
 
-        let _ = self
-            .pending
-            .push(PendingRequest::new(sid, now, self.config.p2_timeout));
+        // Propagated, not discarded: an untracked pending request means the response
+        // is never matched and the P2 timeout never fires, so the caller waits
+        // forever on a request the library believes it sent.
+        self.pending
+            .push(PendingRequest::new(sid, now, self.config.p2_timeout))
+            .map_err(|_| ClientError::QueueFull)?;
 
         Ok(())
     }
@@ -286,10 +318,14 @@ impl<
     /// `ReadDataByPeriodicIdentifierResponseData`. For a DID of `0xF201` the low byte is `0x01`.
     ///
     /// Silently does nothing if already subscribed or the registry is full.
-    pub fn subscribe_periodic(&mut self, did_low_byte: u8) {
-        if !self.periodic_dids.contains(&did_low_byte) {
-            let _ = self.periodic_dids.push(did_low_byte);
+    pub fn subscribe_periodic(&mut self, did_low_byte: u8) -> Result<(), ClientError> {
+        if self.periodic_dids.contains(&did_low_byte) {
+            return Ok(());
         }
+
+        self.periodic_dids
+            .push(did_low_byte)
+            .map_err(|_| ClientError::TooManySubscriptions)
     }
 
     /// Removes a periodic DID subscription.
@@ -313,6 +349,17 @@ impl<
     ///
     /// Events are consumed - calling `drain_events` twice returns events on the first call and
     /// nothing on the second.
+    /// Records an observed event for the caller to drain.
+    ///
+    /// Fails rather than dropping. This queue is the client's only channel for
+    /// reporting what it saw, so a silently discarded event means a response the
+    /// caller will never learn about.
+    fn emit(&mut self, event: ClientEvent<MAX_DATA>) -> Result<(), ClientError> {
+        self.events
+            .push(event)
+            .map_err(|_| ClientError::EventQueueFull)
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = ClientEvent<MAX_DATA>> + '_ {
         self.events.drain(..)
     }

@@ -20,13 +20,30 @@ use ace_can::{
     Segmenter, SegmenterConfig,
 };
 use ace_core::Vec;
+use ace_core::storage::CapacityError;
+use ace_core::{
+    clock::Instant,
+    io::{InboundFrame, NodeAddress},
+};
 use ace_server::{
+    NrcError,
     handler::ServerHandler,
     security_provider::SecurityProvider,
     server::{ServerError, UdsServer},
-    NrcError,
 };
-use ace_sim::{clock::Instant, io::NodeAddress};
+
+/// What a frame arriving on the CAN segment means to an ECU node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CanArrival {
+    /// A request addressed to this node alone.
+    PhysicalRequest,
+
+    /// A request broadcast to every node on the segment.
+    FunctionalRequest,
+
+    /// The peer's flow control for a multi-frame response this node is sending.
+    FlowControlForOurResponse,
+}
 
 // region: EcuNodeError
 
@@ -35,6 +52,8 @@ pub enum EcuNodeError<SE: NrcError> {
     IsoTp(ace_can::IsoTpError),
     CanOutboxFull,
     Server(ServerError<SE>),
+    /// An assembled frame exceeded its bounded buffer.
+    FrameTooLong,
 }
 
 // endregion: EcuNodeError
@@ -78,6 +97,9 @@ pub struct EcuNode<
     /// CAN ID the gateway listens on for responses.
     pub response_can_id: u32,
 
+    /// CAN ID carrying functionally addressed (broadcast) requests.
+    pub functional_can_id: u32,
+
     /// Reassembles incoming ISO-TP CAN request frames → UDS bytes.
     req_reassembler: Reassembler<CAN_MAX_FRAME>,
 
@@ -108,24 +130,24 @@ pub struct EcuNode<
 }
 
 impl<
-        const UDS_MAX_FRAME: usize,
-        const UDS_MAX_OUTBOX: usize,
-        const CAN_MAX_FRAME: usize,
-        const CAN_MAX_OUTBOX: usize,
-        const MAX_SESSIONS: usize,
-        const MAX_SERVICES: usize,
-        const MAX_DIDS: usize,
-        const MAX_SECURITY_LEVELS: usize,
-        const DEFAULT_S3: u64,
-        const DEFAULT_P2: u64,
-        const DEFAULT_P2_EXT: u64,
-        const DEFAULT_LOCKOUT: u64,
-        const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
-        const MAX_SEED: usize,
-        const MAX_PERIODIC: usize,
-        H,
-        S,
-    >
+    const UDS_MAX_FRAME: usize,
+    const UDS_MAX_OUTBOX: usize,
+    const CAN_MAX_FRAME: usize,
+    const CAN_MAX_OUTBOX: usize,
+    const MAX_SESSIONS: usize,
+    const MAX_SERVICES: usize,
+    const MAX_DIDS: usize,
+    const MAX_SECURITY_LEVELS: usize,
+    const DEFAULT_S3: u64,
+    const DEFAULT_P2: u64,
+    const DEFAULT_P2_EXT: u64,
+    const DEFAULT_LOCKOUT: u64,
+    const DEFAULT_MAX_SECURITY_ATTEMPTS: u8,
+    const MAX_SEED: usize,
+    const MAX_PERIODIC: usize,
+    H,
+    S,
+>
     EcuNode<
         UDS_MAX_FRAME,
         UDS_MAX_OUTBOX,
@@ -149,10 +171,18 @@ where
     H: ServerHandler,
     S: SecurityProvider,
 {
+    /// Builds an ECU node.
+    ///
+    /// `functional_can_id` is the CAN identifier carrying functionally addressed
+    /// requests - 0x7DF by convention on classic CAN. Frames arriving there are
+    /// translated to the server's functional UDS address rather than its physical one,
+    /// which is what lets the server apply ISO 14229-1's suppression rules without
+    /// knowing anything about CAN.
     pub fn new(
         logical_address: u16,
         request_can_id: u32,
         response_can_id: u32,
+        functional_can_id: u32,
         mode: IsoTpAddressingMode,
         server: UdsServer<
             UDS_MAX_FRAME,
@@ -176,6 +206,7 @@ where
             logical_address,
             request_can_id,
             response_can_id,
+            functional_can_id,
             req_reassembler: Reassembler::new(ReassemblerConfig::new(mode.clone())),
             resp_segmenter: Segmenter::new(SegmenterConfig::classic(mode)),
             server,
@@ -192,26 +223,78 @@ where
     /// `server.handle`. On flow control needed, emits FC frame to `can_outbox`.
     /// Also handles FC frames arriving from the gateway (responding to our
     /// response segmenter's multi-frame transmissions).
+    /// Delivers a CAN frame that arrived on this node's bus.
+    ///
+    /// Takes the whole frame rather than just its bytes so the arrival CAN ID survives
+    /// to the UDS layer. On classic CAN the functional address *is* a distinct CAN ID -
+    /// 0x7DF conventionally - so discarding the arrival ID here would make a broadcast
+    /// indistinguishable from a physically addressed request, and node-side addressing
+    /// impossible to implement above this point.
+    /// Decides whether a frame on the segment is this node's, and what it means.
+    ///
+    /// `None` is the common case on a shared bus: most frames belong to somebody else.
+    fn classify_arrival(&self, frame: &InboundFrame<'_>) -> Option<CanArrival> {
+        // A CAN controller does not accept its own transmissions. This node's flow
+        // control is addressed to its request identifier, so without this it would come
+        // back and be classified as a fresh request.
+        //
+        // Deliberately not load-bearing: removing it currently fails no test, because a
+        // flow-control PCI fed to the request reassembler is rejected and the error is
+        // discarded by the caller. That makes the correctness of this layer depend on a
+        // swallowed error one layer down, which is what this states explicitly instead.
+        if frame.src.0 == self.response_can_id {
+            return None;
+        }
+
+        // Flow control is the one PCI that travels against the direction of data, which
+        // is what distinguishes it from a request arriving on the same identifier.
+        let is_flow_control = frame.data.first().is_some_and(|first| first & 0xF0 == 0x30);
+
+        if is_flow_control && frame.dst.0 == self.response_can_id {
+            return Some(CanArrival::FlowControlForOurResponse);
+        }
+
+        if frame.dst.0 == self.request_can_id {
+            return Some(CanArrival::PhysicalRequest);
+        }
+
+        if frame.dst.0 == self.functional_can_id {
+            return Some(CanArrival::FunctionalRequest);
+        }
+
+        None
+    }
+
     pub fn handle_can_frame(
         &mut self,
-        data: &[u8],
+        frame: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), EcuNodeError<H::Error>> {
-        // Check if this is a flow control frame for our response segmenter
-        // FC frames have upper nibble 0x3 - if we are waiting for FC, feed it
-        if let Some(&first) = data.first() {
-            if first & 0xF0 == 0x30 {
-                // Flow control for our response segmenter
-                if let Err(e) = self.resp_segmenter.handle_flow_control(data) {
-                    // Non-fatal - segmenter may not be waiting for FC
-                    let _ = e;
-                } else {
-                    // Drain any newly unblocked consecutive frames
-                    self.drain_resp_segmenter()?;
-                }
+        let data = frame.data;
 
+        // Acceptance is decided here, before any ISO-TP state is touched.
+        //
+        // This decision used to sit at the far end of the function: flow control was fed
+        // to the response segmenter and payload to the request reassembler first, and
+        // only then was the destination checked. Every frame on the segment therefore
+        // mutated this node's state even when it belonged to another ECU, and the node
+        // was correct only because whatever drove it filtered first - which a real ECU
+        // has nobody to do for it.
+        let arrival = match self.classify_arrival(frame) {
+            Some(a) => a,
+            None => return Ok(()),
+        };
+
+        if matches!(arrival, CanArrival::FlowControlForOurResponse) {
+            if self.resp_segmenter.handle_flow_control(data).is_err() {
+                // Non-fatal: the segmenter may not be waiting for flow control.
                 return Ok(());
             }
+
+            // Drain any newly unblocked consecutive frames.
+            self.drain_resp_segmenter()?;
+
+            return Ok(());
         }
 
         // Otherwise feed into request reassembler
@@ -223,12 +306,28 @@ where
             ReassembleResult::Complete { len } => {
                 if let Some(uds_bytes) = self.req_reassembler.message(len) {
                     let mut buf: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                    let _ = buf.extend_from_slice(&uds_bytes[..len.min(CAN_MAX_FRAME)]);
+                    buf.extend_from_slice(&uds_bytes[..len])
+                        .map_err(|_| EcuNodeError::FrameTooLong)?;
                     self.req_reassembler.reset();
 
-                    // Feed UDS request to server
+                    // Translate the arrival identifier into the UDS address space. The
+                    // server compares logical addresses and must never need to know what
+                    // a CAN identifier is - that is the layering this crate preserves.
+                    let uds_dst = match arrival {
+                        CanArrival::PhysicalRequest => u32::from(self.server.physical_address()),
+                        CanArrival::FunctionalRequest => {
+                            u32::from(self.server.functional_address())
+                        }
+                        CanArrival::FlowControlForOurResponse => {
+                            debug_assert!(false, "flow control returns before reassembly");
+                            return Ok(());
+                        }
+                    };
+
+                    let uds_frame =
+                        InboundFrame::new(frame.src.clone(), NodeAddress(uds_dst), &buf);
                     self.server
-                        .handle(&NodeAddress(self.request_can_id), &buf, now)
+                        .handle(&uds_frame, now)
                         .map_err(EcuNodeError::Server)?;
                 } else {
                     self.req_reassembler.reset();
@@ -237,13 +336,12 @@ where
             ReassembleResult::FlowControl { frame, len: fc_len } => {
                 // Send FC back to gateway's request segmenter
                 let mut fc: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                let _ = fc.extend_from_slice(&frame[..fc_len]);
+                fc.extend_from_slice(&frame[..fc_len])
+                    .map_err(|_| EcuNodeError::FrameTooLong)?;
 
-                if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                    return Err(EcuNodeError::CanOutboxFull);
-                } else {
-                    self.can_outbox.push((NodeAddress(self.request_can_id), fc));
-                }
+                self.can_outbox
+                    .push((NodeAddress(self.request_can_id), fc))
+                    .map_err(|_| EcuNodeError::CanOutboxFull)?;
             }
             ReassembleResult::InProgress => {}
             ReassembleResult::SessionAborted {
@@ -251,8 +349,13 @@ where
                 fc_len,
             } => {
                 let mut fc: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                let _ = fc.extend_from_slice(&flow_control[..fc_len]);
-                let _ = self.can_outbox.push((NodeAddress(self.request_can_id), fc));
+                fc.extend_from_slice(&flow_control[..fc_len])
+                    .map_err(|_| EcuNodeError::CanOutboxFull)?;
+                // Previously unguarded: an abort flow control frame was dropped with
+                // no check and no signal, stalling the ISO-TP transfer.
+                self.can_outbox
+                    .push((NodeAddress(self.request_can_id), fc))
+                    .map_err(|_| EcuNodeError::CanOutboxFull)?;
 
                 self.req_reassembler.reset();
             }
@@ -272,7 +375,9 @@ where
 
         // Drain server outbox into response segmenter
         let mut srv_out: Vec<(NodeAddress, Vec<u8, UDS_MAX_FRAME>), UDS_MAX_OUTBOX> = Vec::new();
-        self.server.drain_outbox(&mut srv_out);
+        self.server
+            .drain_outbox(&mut srv_out)
+            .map_err(|_| EcuNodeError::FrameTooLong)?;
 
         for (_, uds_data) in &srv_out {
             // Start segmenting the UDS response
@@ -295,14 +400,21 @@ where
     pub fn drain_can_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, CAN_MAX_FRAME>), CAN_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.can_outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.can_outbox.len();
 
         for item in self.can_outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     // endregion: CAN outbox
@@ -326,15 +438,14 @@ where
                 SegmentResult::WaitForFlowControl => break,
                 SegmentResult::Frame { len } => {
                     let mut frame: Vec<u8, CAN_MAX_FRAME> = Vec::new();
-                    let _ = frame.extend_from_slice(&out_buf[..len]);
+                    frame
+                        .extend_from_slice(&out_buf[..len])
+                        .map_err(|_| EcuNodeError::FrameTooLong)?;
 
                     // Frames go to response_can_id - gateway listens there
-                    if self.can_outbox.len() >= CAN_MAX_OUTBOX {
-                        return Err(EcuNodeError::CanOutboxFull);
-                    } else {
-                        self.can_outbox
-                            .push((NodeAddress(self.response_can_id), frame));
-                    }
+                    self.can_outbox
+                        .push((NodeAddress(self.response_can_id), frame))
+                        .map_err(|_| EcuNodeError::CanOutboxFull)?;
                 }
             }
         }

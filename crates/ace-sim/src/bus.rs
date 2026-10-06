@@ -1,7 +1,7 @@
 // region: Imports
 
 use crate::clock::{Clock, Duration, Instant, SimClock};
-use crate::fault::FaultConfig;
+use crate::fault::{FaultConfig, ScriptedFault};
 use crate::io::NodeAddress;
 use crate::rng::{Rng, Xorshift64};
 use ace_core::Vec;
@@ -11,7 +11,7 @@ use ace_core::Vec;
 // region: Envelope
 
 /// A message in-flight on the simulation bus.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Envelope<const MAX_DATA: usize> {
     pub src: NodeAddress,
     pub dst: NodeAddress,
@@ -65,9 +65,13 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
 
         for envelope in self.queue.drain(..) {
             if envelope.deliver_at <= now {
-                let _ = delivered.push(envelope);
+                delivered
+                    .push(envelope)
+                    .expect("delivery buffer is sized to the queue");
             } else {
-                let _ = remaining.push(envelope);
+                remaining
+                    .push(envelope)
+                    .expect("remaining buffer is sized to the queue");
             }
         }
 
@@ -91,6 +95,28 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
     /// Returns `true` if the message was enqueued, `false` if it was dropped by fault injection or
     /// the queue is full
     pub fn send(&mut self, src: NodeAddress, dst: NodeAddress, data: &[u8]) -> bool {
+        self.send_with_min_latency(src, dst, data, Duration::ZERO)
+    }
+
+    /// Enqueues a message from `src` to `dst`, delivered no earlier than `min_latency` after now,
+    /// with fault injection applied on top.
+    ///
+    /// `SimBus` itself carries no notion of transmission rate - that varies by medium (a CAN
+    /// frame and a TCP segment do not cost the same to put on the wire), so it takes the floor
+    /// as a parameter instead of computing it. A caller with no medium-specific delay to add
+    /// gets the old zero-latency behaviour via `send`.
+    ///
+    /// Without a nonzero floor here, a message sent and a subsequent `tick()` call within the
+    /// same simulation step were indistinguishable from instantaneous delivery, which made the
+    /// harness's send/tick ordering within a step into a de facto latency model: whichever loop
+    /// order an integrator picked was "correct" only because nothing could disprove it.
+    pub fn send_with_min_latency(
+        &mut self,
+        src: NodeAddress,
+        dst: NodeAddress,
+        data: &[u8],
+        min_latency: Duration,
+    ) -> bool {
         let r = self
             .rng
             .chance(self.faults.message_loss.0, self.faults.message_loss.1);
@@ -106,6 +132,17 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             return false;
         }
 
+        let scripted = self.faults.script.next();
+        let (extra_delay, duplicate, replacement) = match scripted {
+            Some(ScriptedFault::DropNext) => return false,
+            Some(ScriptedFault::DelayNext(delay)) => (delay, false, None),
+            Some(ScriptedFault::DuplicateNext) => (Duration::ZERO, true, None),
+            Some(ScriptedFault::ReplaceByte { offset, value }) => {
+                (Duration::ZERO, false, Some((usize::from(offset), value)))
+            }
+            None => (Duration::ZERO, false, None),
+        };
+
         let mut payload = Vec::new();
 
         for &byte in data {
@@ -113,10 +150,20 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
                 .rng
                 .chance(self.faults.corruption.0, self.faults.corruption.1)
             {
-                let _ = payload.push(byte ^ self.rng.next_u8());
+                payload
+                    .push(byte ^ self.rng.next_u8())
+                    .expect("payload buffer matches the source frame");
             } else {
-                let _ = payload.push(byte);
+                payload
+                    .push(byte)
+                    .expect("payload buffer matches the source frame");
             }
+        }
+
+        if let Some((offset, value)) = replacement
+            && let Some(byte) = payload.get_mut(offset)
+        {
+            *byte = value;
         }
 
         let deliver_at = if self
@@ -124,9 +171,9 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             .chance(self.faults.message_delay.0, self.faults.message_delay.1)
         {
             let delay_us = self.rng.next_u64() % self.faults.max_delay.as_micros().max(1);
-            self.clock.now() + Duration::from_micros(delay_us)
+            self.clock.now() + min_latency + extra_delay + Duration::from_micros(delay_us)
         } else {
-            self.clock.now()
+            self.clock.now() + min_latency + extra_delay
         };
 
         let envelope = Envelope {
@@ -136,11 +183,15 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             deliver_at,
         };
 
-        if self.queue.len() >= MAX_QUEUED {
+        let copies = if duplicate { 2 } else { 1 };
+        if copies > MAX_QUEUED.saturating_sub(self.queue.len()) {
             return false;
         }
 
-        let _ = self.queue.push(envelope);
+        let _ = self.queue.push(envelope.clone());
+        if duplicate {
+            let _ = self.queue.push(envelope);
+        }
 
         true
     }

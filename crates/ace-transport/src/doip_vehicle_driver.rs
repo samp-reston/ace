@@ -25,12 +25,12 @@ use aced::gateway::tester::{
     ConnectionId, DoipConnectionConfig, DoipConnectionPhase, DoipNodeProfile, DoipTester,
     DoipTesterError, DoipTesterEvent, TargetId,
 };
-use aced::sim::io::NodeAddress;
+use aced::sim::io::{InboundFrame, NodeAddress};
 use core::time::Duration;
 use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpStream, UdpSocket},
-    sync::mpsc::{self, channel, Receiver, Sender},
+    sync::mpsc::{self, Receiver, Sender, channel},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -59,31 +59,18 @@ pub struct VehicleDriverConfig {
     /// Read buffer size per TCP connection.
     pub read_buf_size: usize,
 
-    /// UDP port for DoIP discovery.
+    /// UDP port for DoIP discovery. Discovery address and protocol version are configured through
+    /// [`DiscoveryConfig`] and [`discover_gateways`].
     pub udp_port: u16,
-
-    /// UDP multicast address for vehicle announcement.
-    pub udp_multicast_addr: &'static str,
-
-    /// The default protocol version used.
-    pub default_protocol_version: ProtocolVersion,
 }
 
 impl VehicleDriverConfig {
-    pub fn new(
-        tester_address: u16,
-        tick_interval: Duration,
-        read_buf_size: usize,
-        udp_multicast_addr: &'static str,
-        protocol: ProtocolVersion,
-    ) -> Self {
+    pub fn new(tester_address: u16, tick_interval: Duration, read_buf_size: usize) -> Self {
         Self {
             tester_address,
             tick_interval,
             read_buf_size,
             udp_port: 13400,
-            udp_multicast_addr,
-            default_protocol_version: protocol,
         }
     }
 }
@@ -112,8 +99,11 @@ struct _TcpConnectionHandle {
 ///
 /// ```ignore
 ///
-/// let mut driver = DoipVehicleDriver::new(VehicleDriverConfig::new(0x0E00,
-/// Duration::from_millis(1), 65535, 13400, "0.0.0.0"));
+/// let mut driver = DoipVehicleDriver::new(VehicleDriverConfig::new(
+///     0x0E00,
+///     Duration::from_millis(1),
+///     65535,
+/// ));
 ///
 /// // Connect to a gateway at a known IP
 /// let conn_id = driver.connect(
@@ -161,7 +151,7 @@ const MAX_CONNECTIONS: usize = 8;
 const MAX_TARGETS: usize = 16;
 const TCP_MAX_OUTBOX: usize = 8;
 const TCP_MAX_FRAME: usize = 4096;
-const MAX_CONNECTION_EVENTS: usize = 8;
+const MAX_CONNECTION_ACTIONS: usize = 8;
 const PENDING: usize = 8;
 const SIM_MAX_FRAME: usize = 4096;
 const SIM_MAX_OUTBOX: usize = 8;
@@ -174,7 +164,7 @@ pub type MyDoipTester = DoipTester<
     MAX_TARGETS,
     TCP_MAX_FRAME,
     TCP_MAX_OUTBOX,
-    MAX_CONNECTION_EVENTS,
+    MAX_CONNECTION_ACTIONS,
     PENDING,
     SIM_MAX_FRAME,
     SIM_MAX_OUTBOX,
@@ -244,12 +234,9 @@ impl DoipVehicleDriver {
 
         self.tcp_writers.push((conn_id, write_tx));
 
-        self.tester.open_connection(config).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "DoipTester: too many connections",
-            )
-        })?;
+        self.tester
+            .open_connection(config)
+            .map_err(|_| std::io::Error::other("DoipTester: too many connections"))?;
 
         let now = aced::sim::clock::Instant::from_micros(
             SystemTime::now()
@@ -282,19 +269,30 @@ impl DoipVehicleDriver {
         let now = self.wall_clock_now();
 
         while let Ok(msg) = self.tcp_rx.try_recv() {
-            let _ = self
-                .tester
-                .handle(&NodeAddress(msg.connection_id.0 as u32), &msg.data, now);
+            // Real traffic arrives on a socket already bound to this tester, so the
+            // destination is this tester by construction.
+            let inbound = InboundFrame::new(
+                NodeAddress(msg.connection_id.0 as u32),
+                self.tester.address().clone(),
+                &msg.data,
+            );
+            let _ = self.tester.handle(&inbound, now);
         }
 
         while let Ok(data) = self.udp_rx.try_recv() {
             for (conn_id, _) in &self.tcp_writers {
                 let gateway_addr = NodeAddress(conn_id.0 as u32);
-                let _ = self.tester.handle(&gateway_addr, &data, now);
+                let inbound = InboundFrame::new(gateway_addr, self.tester.address().clone(), &data);
+                let _ = self.tester.handle(&inbound, now);
             }
         }
 
-        self.tester.tick(now);
+        // Discarded, like the `handle` calls above: this driver runs the tester on
+        // its own thread and has no channel back to the caller, so there is
+        // nowhere to report a failure to. That is a gap in the driver, not an
+        // intentional policy - see the readiness plan's Phase 3 item on giving
+        // the transport driver an error/event channel.
+        let _ = self.tester.tick(now);
 
         self.flush_outbox();
     }
@@ -320,9 +318,9 @@ impl DoipVehicleDriver {
         conn_id: ConnectionId,
         target_address: u16,
         did_low_byte: u8,
-    ) {
+    ) -> Result<(), DoipTesterError> {
         self.tester
-            .subscribe_periodic(conn_id, target_address, did_low_byte);
+            .subscribe_periodic(conn_id, target_address, did_low_byte)
     }
 
     /// Drains all accumulated tester events.
@@ -352,7 +350,12 @@ impl DoipVehicleDriver {
             TCP_MAX_OUTBOX,
         > = aced::core::Vec::new();
 
-        self.tester.drain_outbox(&mut outbox);
+        // Discarded for the same reason as the `handle`/`tick` calls in this driver:
+        // it owns the tester on its own thread with no channel back to the caller.
+        // `outbox` is freshly constructed here with the same bound as the tester's
+        // outbox, so this cannot currently fail - see the readiness plan item on
+        // giving the driver a real error/event channel.
+        let _ = self.tester.drain_outbox(&mut outbox);
 
         for (dst, data) in &outbox {
             let conn_id = ConnectionId(dst.0 as u16);
@@ -454,15 +457,10 @@ fn udp_listener_thread(tx: Sender<Vec<u8>>, udp_port: u16) {
     };
 
     let mut buf = vec![0u8; 4096];
-    loop {
-        match socket.recv_from(&mut buf) {
-            Ok((len, _src)) => {
-                let frame = buf[..len].to_vec();
-                if tx.send(frame).is_err() {
-                    break;
-                }
-            }
-            Err(_) => break,
+    while let Ok((len, _src)) = socket.recv_from(&mut buf) {
+        let frame = buf[..len].to_vec();
+        if tx.send(frame).is_err() {
+            break;
         }
     }
 }

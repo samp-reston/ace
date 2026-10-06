@@ -1,4 +1,4 @@
-use crate::{message::DataIdentifier, UdsError};
+use crate::{UdsError, message::DataIdentifier};
 use ace_core::{FrameIter, FrameRead};
 use ace_macros::{FrameCodec, FrameWrite};
 
@@ -82,11 +82,7 @@ impl<'a> FrameRead<'a> for DefineByMemoryAddressRequest<'a> {
 
         // Truncate to the largest multiple of stride that fits in the buffer,
         // discarding any trailing bytes that don't form a complete record.
-        let memory_data_len = if stride == 0 {
-            0
-        } else {
-            (buf.len() / stride) * stride
-        };
+        let memory_data_len = buf.len().checked_div(stride).unwrap_or(0) * stride;
 
         let memory_data = FrameIter::new(&buf[..memory_data_len]);
         *buf = &buf[memory_data_len..];

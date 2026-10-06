@@ -4,7 +4,7 @@ use heapless::format;
 
 #[derive(Debug)]
 pub enum UdsError {
-    Transport(ace_core::DiagError),
+    Codec(ace_core::CodecError),
     NegativeResponse(u8),
     Parse(heapless::String<64>),
     ResponsePending,
@@ -18,7 +18,7 @@ pub enum UdsError {
 impl core::fmt::Display for UdsError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            UdsError::Transport(e) => write!(f, "transport error: {:?}", e),
+            UdsError::Codec(e) => write!(f, "codec error: {:?}", e),
             UdsError::NegativeResponse(nrc) => {
                 write!(f, "negative response: 0x{:02X}", nrc)
             }
@@ -33,9 +33,9 @@ impl core::fmt::Display for UdsError {
 
 // region: UdsError From Impls
 
-impl From<ace_core::DiagError> for UdsError {
-    fn from(e: ace_core::DiagError) -> Self {
-        UdsError::Transport(e)
+impl From<ace_core::CodecError> for UdsError {
+    fn from(e: ace_core::CodecError) -> Self {
+        UdsError::Codec(e)
     }
 }
 
@@ -45,18 +45,18 @@ impl From<ValidationError> for UdsError {
     }
 }
 
-impl From<UdsError> for ace_core::DiagError {
+impl From<UdsError> for ace_core::CodecError {
     fn from(e: UdsError) -> Self {
         match e {
-            UdsError::Transport(diag) => diag,
-            UdsError::Parse(msg) => ace_core::DiagError::InvalidFrame(msg),
-            UdsError::NegativeResponse(nrc) => ace_core::DiagError::InvalidFrame(
+            UdsError::Codec(diag) => diag,
+            UdsError::Parse(msg) => ace_core::CodecError::InvalidFrame(msg),
+            UdsError::NegativeResponse(nrc) => ace_core::CodecError::InvalidFrame(
                 format!("negative response: {nrc}").unwrap_or_default(),
             ),
-            UdsError::ResponsePending => ace_core::DiagError::InvalidFrame(
+            UdsError::ResponsePending => ace_core::CodecError::InvalidFrame(
                 heapless::String::try_from("response pending").unwrap_or_default(),
             ),
-            UdsError::Validation(e) => ace_core::DiagError::InvalidFrame(
+            UdsError::Validation(e) => ace_core::CodecError::InvalidFrame(
                 format!("validation error: {e}").unwrap_or_default(),
             ),
         }

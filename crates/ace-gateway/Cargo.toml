@@ -1,7 +1,8 @@
 [package]
 name = "ace-gateway"
-version = "0.5.5"
+version = "0.6.0"
 edition = "2024"
+rust-version = "1.88"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "DoIP Gateway, ISO-TP bridge node, and DoIP Tester"
 readme = "README.md"
@@ -20,11 +21,10 @@ alloc = [
 	"ace-macros/alloc",
 	"ace-client/alloc",
 	"ace-server/alloc",
-	"ace-sim/alloc",
+	
 ]
 
 [dependencies]
-ace-sim = { workspace = true }
 ace-doip = { workspace = true }
 ace-can = { workspace = true }
 ace-proto = { workspace = true }

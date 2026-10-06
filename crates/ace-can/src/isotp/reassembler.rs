@@ -37,6 +37,14 @@ enum ReassemblerState {
         total_len: u32,
         received: usize,
         next_sequence: u8,
+
+        /// Consecutive frames still permitted before the sender must wait for another
+        /// flow control.
+        ///
+        /// Counted down from the configured block size. Without this the reassembler
+        /// advertised a block size in the flow control it sent and then never sent
+        /// another, so any sender honouring that block size waited forever.
+        block_remaining: u8,
     },
 }
 
@@ -94,6 +102,24 @@ impl<const MAX_FRAME: usize> Reassembler<MAX_FRAME> {
     }
 
     /// Resets to idle, discarding any in-progress session.
+    /// Builds a continue-to-send flow control carrying this reassembler's block size
+    /// and separation time.
+    ///
+    /// Shared by the first frame and every block boundary, so the block size a receiver
+    /// advertises cannot drift from the one it enforces.
+    fn continue_to_send(&self) -> Result<[u8; 3], IsoTpError> {
+        let fc_pci = PciFrame::FlowControl {
+            status: FlowStatus::ContinueToSend,
+            block_size: self.config.block_size,
+            st_min: self.config.st_min,
+        };
+
+        let mut fc_buf = [0u8; 3];
+        fc_pci.encode_header(&mut fc_buf)?;
+
+        Ok(fc_buf)
+    }
+
     pub fn reset(&mut self) {
         self.state = ReassemblerState::Idle;
     }
@@ -150,15 +176,10 @@ impl<const MAX_FRAME: usize> Reassembler<MAX_FRAME> {
                     total_len,
                     received: copy_len,
                     next_sequence: 1,
+                    block_remaining: self.config.block_size,
                 };
 
-                let fc_pci = PciFrame::FlowControl {
-                    status: FlowStatus::ContinueToSend,
-                    block_size: self.config.block_size,
-                    st_min: self.config.st_min,
-                };
-                let mut fc_buf = [0u8; 3];
-                fc_pci.encode_header(&mut fc_buf)?;
+                let fc_buf = self.continue_to_send()?;
 
                 if was_active {
                     Ok(ReassembleResult::SessionAborted {
@@ -179,12 +200,13 @@ impl<const MAX_FRAME: usize> Reassembler<MAX_FRAME> {
                 sequence_number,
                 data,
             } => {
-                let (total_len, received, next_sequence) = match &self.state {
+                let (total_len, received, next_sequence, block_remaining) = match &self.state {
                     ReassemblerState::Active {
                         total_len,
                         received,
                         next_sequence,
-                    } => (*total_len, *received, *next_sequence),
+                        block_remaining,
+                    } => (*total_len, *received, *next_sequence, *block_remaining),
                     ReassemblerState::Idle => return Err(IsoTpError::UnexpectedConsecutiveFrame),
                 };
 
@@ -206,16 +228,38 @@ impl<const MAX_FRAME: usize> Reassembler<MAX_FRAME> {
                 let new_sequence = (next_sequence + 1) & NIBBLE_MASK;
 
                 if new_received >= total {
+                    // Completion wins over a block boundary: there is nothing left to
+                    // authorise, so no further flow control is due.
                     self.state = ReassemblerState::Idle;
-                    Ok(ReassembleResult::Complete { len: total })
-                } else {
-                    self.state = ReassemblerState::Active {
-                        total_len,
-                        received: new_received,
-                        next_sequence: new_sequence,
-                    };
-                    Ok(ReassembleResult::InProgress)
+                    return Ok(ReassembleResult::Complete { len: total });
                 }
+
+                // A block size of zero means "send everything without further flow
+                // control", so the counter is only meaningful above zero.
+                let block_exhausted = self.config.block_size > 0 && block_remaining <= 1;
+
+                self.state = ReassemblerState::Active {
+                    total_len,
+                    received: new_received,
+                    next_sequence: new_sequence,
+                    block_remaining: if block_exhausted {
+                        self.config.block_size
+                    } else {
+                        block_remaining.saturating_sub(1)
+                    },
+                };
+
+                if block_exhausted {
+                    // The block the last flow control authorised is used up. ISO 15765-2
+                    // requires a new flow control here; the sender is blocked until it
+                    // arrives.
+                    return Ok(ReassembleResult::FlowControl {
+                        frame: self.continue_to_send()?,
+                        len: 3,
+                    });
+                }
+
+                Ok(ReassembleResult::InProgress)
             }
             // endregion: Consecutive Frame
 

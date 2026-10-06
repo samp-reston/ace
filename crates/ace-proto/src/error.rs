@@ -7,16 +7,16 @@ pub enum Error {
     InvalidPayloadLength,
 }
 
-impl From<Error> for ace_core::DiagError {
+impl From<Error> for ace_core::CodecError {
     fn from(e: Error) -> Self {
         match e {
             Error::BufferTooShort { expected, actual } => {
-                ace_core::DiagError::LengthMismatch { expected, actual }
+                ace_core::CodecError::LengthMismatch { expected, actual }
             }
             Error::PayloadLengthMismatch { expected, actual } => {
-                ace_core::DiagError::LengthMismatch { expected, actual }
+                ace_core::CodecError::LengthMismatch { expected, actual }
             }
-            _ => ace_core::DiagError::InvalidFrame(ace_core::diag_err_str("proto parse error")),
+            _ => ace_core::CodecError::InvalidFrame(ace_core::codec_err_str("proto parse error")),
         }
     }
 }

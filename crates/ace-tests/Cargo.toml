@@ -1,9 +1,38 @@
 [package]
 name = "ace-tests"
-version = "0.5.5"
+version = "0.6.0"
 edition = "2024"
+rust-version = "1.88"
 publish = false
 
+# Composes the individual libraries rather than the `ace-api` facade.
+#
+# The facade documents itself as alloc-backed and tells no_std consumers to depend on the
+# individual crates instead, so demonstrating the suite through it could never show that the
+# suite composes for an embedded target - the shape an OEM actually ships. Depending on the
+# crates directly is also the only way this crate proves they compose at all: a facade
+# re-exporting ten crates proves the facade compiles.
+[features]
+default = ["alloc"]
+alloc = [
+	"ace-core/alloc",
+	"ace-can/alloc",
+	"ace-doip/alloc",
+	"ace-sim/alloc",
+	"ace-client/alloc",
+	"ace-server/alloc",
+	"ace-gateway/alloc",
+]
+
 [dependencies]
-aced = { workspace = true }
+ace-core = { workspace = true }
+ace-can = { workspace = true }
+ace-doip = { workspace = true }
+ace-sim = { workspace = true }
+ace-client = { workspace = true }
+ace-server = { workspace = true }
+ace-gateway = { workspace = true }
 heapless = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

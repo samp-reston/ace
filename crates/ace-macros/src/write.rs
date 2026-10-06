@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
-use crate::attrs::{get_repr, ContainerAttrs, FieldAttrs, VariantAttrs};
+use crate::attrs::{ContainerAttrs, FieldAttrs, VariantAttrs, get_repr};
 use crate::util::compile_error;
 
 // region: Entry point
@@ -42,7 +42,7 @@ fn derive_struct(
             return compile_error(
                 proc_macro2::Span::call_site(),
                 "FrameWrite requires named fields",
-            )
+            );
         }
     };
 
@@ -125,7 +125,7 @@ fn derive_enum(
                     arms.push(quote! {
                         #name::#vname(inner) => {
                             <#disc_ty as ace_core::codec::FrameWrite>::encode(&(#id_expr as #disc_ty), buf)
-                                .map_err(|e| <#error as From<ace_core::DiagError>>::from(e))?;
+                                .map_err(|e| <#error as From<ace_core::CodecError>>::from(e))?;
                             <#inner_ty as ace_core::codec::FrameWrite>::encode(inner, buf)
                                 .map_err(|e| <#error as From<_>>::from(e))?;
                         }
@@ -142,7 +142,7 @@ fn derive_enum(
                     arms.push(quote! {
                         #name::#vname(raw) => {
                             <#disc_ty as ace_core::codec::FrameWrite>::encode(raw, buf)
-                                .map_err(|e| <#error as From<ace_core::DiagError>>::from(e))?;
+                                .map_err(|e| <#error as From<ace_core::CodecError>>::from(e))?;
                         }
                     });
                 }
@@ -154,7 +154,7 @@ fn derive_enum(
                 arms.push(quote! {
                     #name::#vname => {
                         <#disc_ty as ace_core::codec::FrameWrite>::encode(&(#id_expr as #disc_ty), buf)
-                            .map_err(|e| <#error as From<ace_core::DiagError>>::from(e))?;
+                            .map_err(|e| <#error as From<ace_core::CodecError>>::from(e))?;
                     }
                 });
             }
@@ -163,7 +163,7 @@ fn derive_enum(
                 return compile_error(
                     proc_macro2::Span::call_site(),
                     "FrameWrite enum variants must be newtype(T) or unit",
-                )
+                );
             }
         }
     }

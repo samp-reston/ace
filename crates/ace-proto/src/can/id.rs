@@ -58,10 +58,10 @@ impl StandardCanId {
 
     /// Creates a `StandardCanId` from a `u16`, validating the 11-bit range.
     ///
-    /// Returns `Err(DiagError::InvalidFrame)` if `val` exceeds `0x7FF`.
-    pub fn new(val: u16) -> Result<Self, ace_core::DiagError> {
+    /// Returns `Err(CodecError::InvalidFrame)` if `val` exceeds `0x7FF`.
+    pub fn new(val: u16) -> Result<Self, ace_core::CodecError> {
         if val > Self::MAX {
-            Err(ace_core::DiagError::InvalidFrame(ace_core::diag_err_str(
+            Err(ace_core::CodecError::InvalidFrame(ace_core::codec_err_str(
                 "id exceeds 11-bit standard CAN range",
             )))
         } else {
@@ -108,9 +108,9 @@ pub struct ExtendedCanId(u32);
 impl ExtendedCanId {
     const MAX: u32 = 0x1FFF_FFFF;
 
-    pub fn new(val: u32) -> Result<Self, ace_core::DiagError> {
+    pub fn new(val: u32) -> Result<Self, ace_core::CodecError> {
         if val > Self::MAX {
-            Err(ace_core::DiagError::InvalidFrame(ace_core::diag_err_str(
+            Err(ace_core::CodecError::InvalidFrame(ace_core::codec_err_str(
                 "id exceeds 29-bit extended CAN range",
             )))
         } else {

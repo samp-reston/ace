@@ -12,19 +12,20 @@ use ace_can::{
     SegmentResult, Segmenter, SegmenterConfig,
 };
 use ace_core::Vec;
-use ace_sim::{clock::Instant, io::NodeAddress};
+use ace_core::storage::CapacityError;
+use ace_core::{clock::Instant, io::NodeAddress};
 
 // endregion: Imports
 
 // region: Capacity Constants
 
-/// Max reassembled UDS message size.
+// Max reassembled UDS message size.
 // pub const ISOTP_MAX_UDS: usize = 4096;
 
-/// Max CAN frame payload bytes (classic CAN = 8, CAN FD = 64).
+// Max CAN frame payload bytes (classic CAN = 8, CAN FD = 64).
 // pub const ISOTP_MAX_FRAME: usize = 64;
 
-/// Max outbox depth.
+// Max outbox depth.
 // pub const ISOTP_MAX_OUT: usize = 64;
 
 // endregion: Capacity Constants
@@ -36,6 +37,8 @@ pub enum IsoTpNodeError {
     Reassembler(IsoTpError),
     Segmenter(IsoTpError),
     OutboxFull,
+    /// An assembled frame exceeded its bounded buffer.
+    FrameTooLong,
 }
 
 // endregion: IsoTpError
@@ -80,11 +83,11 @@ pub struct IsoTpNode<
 }
 
 impl<
-        const UDS_MAX_FRAME: usize,
-        const ISOTP_MAX_FRAME: usize,
-        const ISOTP_MAX_OUT: usize,
-        const UDS_MAX_OUTBOX: usize,
-    > IsoTpNode<UDS_MAX_FRAME, ISOTP_MAX_FRAME, ISOTP_MAX_OUT, UDS_MAX_OUTBOX>
+    const UDS_MAX_FRAME: usize,
+    const ISOTP_MAX_FRAME: usize,
+    const ISOTP_MAX_OUT: usize,
+    const UDS_MAX_OUTBOX: usize,
+> IsoTpNode<UDS_MAX_FRAME, ISOTP_MAX_FRAME, ISOTP_MAX_OUT, UDS_MAX_OUTBOX>
 {
     pub fn new(
         request_can_id: u32,
@@ -169,24 +172,32 @@ impl<
                     let gateway_addr = NodeAddress(self.request_can_id);
                     let mut frame = Vec::new();
 
-                    let _ = frame.extend_from_slice(&uds_bytes[..len.min(ISOTP_MAX_FRAME)]);
+                    frame
+                        .extend_from_slice(&uds_bytes[..len])
+                        .map_err(|_| IsoTpNodeError::FrameTooLong)?;
 
-                    if self.uds_outbox.len() >= UDS_MAX_OUTBOX {
-                        return Err(IsoTpNodeError::OutboxFull);
-                    }
-                    let _ = self.uds_outbox.push((gateway_addr, frame));
+                    self.uds_outbox
+                        .push((gateway_addr, frame))
+                        .map_err(|_| IsoTpNodeError::OutboxFull)?;
                 }
             }
             ReassembleResult::FlowControl { frame, len: fc_len } => {
                 let ecu_addr = NodeAddress(self.response_can_id);
                 let mut fc_frame = Vec::new();
 
-                let _ = fc_frame.extend_from_slice(&frame[..fc_len]);
+                fc_frame
+                    .extend_from_slice(&frame[..fc_len])
+                    .map_err(|_| IsoTpNodeError::OutboxFull)?;
 
-                if self.uds_outbox.len() >= ISOTP_MAX_OUT {
-                    return Err(IsoTpNodeError::OutboxFull);
-                }
-                let _ = self.can_outbox.push((ecu_addr, fc_frame));
+                // Propagated from the push itself. The guard this replaces measured
+                // `uds_outbox` against `ISOTP_MAX_OUT`, which is `can_outbox`'s
+                // capacity, and then pushed to `can_outbox` - so a full `can_outbox`
+                // passed the check and the flow control frame was silently dropped,
+                // stalling the ISO-TP transfer. Asking the collection itself cannot
+                // name the wrong one.
+                self.can_outbox
+                    .push((ecu_addr, fc_frame))
+                    .map_err(|_| IsoTpNodeError::OutboxFull)?;
             }
             ReassembleResult::InProgress => {}
             ReassembleResult::SessionAborted {
@@ -196,8 +207,15 @@ impl<
                 let ecu_addr = NodeAddress(self.response_can_id);
                 let mut fc_frame = Vec::new();
 
-                let _ = fc_frame.extend_from_slice(&flow_control[..fc_len]);
-                let _ = self.can_outbox.push((ecu_addr, fc_frame));
+                fc_frame
+                    .extend_from_slice(&flow_control[..fc_len])
+                    .map_err(|_| IsoTpNodeError::OutboxFull)?;
+
+                // Previously unguarded: an abort flow control frame was dropped with
+                // no check and no signal.
+                self.can_outbox
+                    .push((ecu_addr, fc_frame))
+                    .map_err(|_| IsoTpNodeError::OutboxFull)?;
 
                 self.reassembler.reset();
             }
@@ -214,28 +232,42 @@ impl<
     pub fn drain_can_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, ISOTP_MAX_FRAME>), ISOTP_MAX_OUT>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.can_outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.can_outbox.len();
 
         for item in self.can_outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     /// Drains reassembled UDS bytes destined for the UdsServer.
     pub fn drain_uds_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, UDS_MAX_FRAME>), UDS_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.uds_outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.uds_outbox.len();
 
         for item in self.uds_outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     // endregion: Outbox Drains
@@ -257,12 +289,13 @@ impl<
                 SegmentResult::WaitForFlowControl => break,
                 SegmentResult::Frame { len } => {
                     let mut frame: Vec<u8, ISOTP_MAX_FRAME> = Vec::new();
-                    let _ = frame.extend_from_slice(&out_buf[..len]);
+                    frame
+                        .extend_from_slice(&out_buf[..len])
+                        .map_err(|_| IsoTpNodeError::FrameTooLong)?;
 
-                    if can_outbox.len() >= ISOTP_MAX_OUT {
-                        return Err(IsoTpNodeError::OutboxFull);
-                    }
-                    can_outbox.push((dst.clone(), frame));
+                    can_outbox
+                        .push((dst.clone(), frame))
+                        .map_err(|_| IsoTpNodeError::OutboxFull)?;
                 }
             }
         }

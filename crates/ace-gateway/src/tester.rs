@@ -18,8 +18,13 @@
 // region: Imports
 
 // use crate::gateway::{TCP_MAX_FRAME, TCP_MAX_OUTBOX};
-use ace_client::{client::UdsClient, config::ClientConfig, event::ClientEvent, ClientError};
+use ace_client::{ClientError, client::UdsClient, config::ClientConfig, event::ClientEvent};
+use ace_core::storage::CapacityError;
 use ace_core::{FrameRead, FrameWrite, Vec};
+use ace_core::{
+    clock::{Duration, Instant},
+    io::{InboundFrame, LinkEvent, NodeAddress},
+};
 use ace_doip::{
     error::DoipError,
     ext::DoipFrameExt,
@@ -30,15 +35,10 @@ use ace_doip::{
     },
 };
 use ace_proto::{
+    DoipFrame,
     doip::constants::{
         DOIP_COMMON_EID_LEN, DOIP_COMMON_VIN_LEN, DOIP_VEHICLE_ANNOUNCEMENT_GID_LEN,
     },
-    DoipFrame,
-};
-use ace_sim::{
-    clock::{Duration, Instant},
-    io::NodeAddress,
-    tcp_bus::TcpEvent,
 };
 
 // endregion: Imports
@@ -212,27 +212,32 @@ pub struct TargetState<
 }
 
 impl<
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    > TargetState<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+> TargetState<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
     fn new(
+        tester_address: u16,
         address: u16,
         default_p2: Duration,
         default_p2_star: Duration,
         timing_tolerance: Duration,
     ) -> Self {
-        let config = ClientConfig::new(0, address)
+        // The client's own address is the *tester's*, and its target is the server it
+        // speaks to. This previously declared address zero and then passed the target's
+        // address as the client's own identity, so a client's notion of itself was both
+        // wrong and unused - nothing read it until responses had to be validated.
+        let config = ClientConfig::new(tester_address, address)
             .with_p2_timeout(default_p2)
             .with_p2_extended_timeout(default_p2_star);
 
         Self {
             address,
-            client: UdsClient::new(config, NodeAddress(address as u32)),
+            client: UdsClient::new(config, NodeAddress(tester_address as u32)),
             p2: default_p2,
             p2_star: default_p2_star,
             timing_tolerance,
@@ -285,7 +290,7 @@ pub struct DoipConnection<
     const MAX_TARGETS: usize,
     const TCP_MAX_FRAME: usize,
     const TCP_MAX_OUTBOX: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     // endregion: DoipConnection Constants
 
     // region: Target Constants
@@ -316,31 +321,31 @@ pub struct DoipConnection<
         MAX_TARGETS,
     >,
     outbox: Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX>,
-    events: Vec<(ConnectionId, TargetId, DoipTesterEvent<MAX_DATA>), MAX_CONNECTION_EVENTS>,
+    events: Vec<(ConnectionId, TargetId, DoipTesterEvent<MAX_DATA>), MAX_CONNECTION_ACTIONS>,
 }
 
 impl<
-        // region: DoipConnection Constants
-        const MAX_TARGETS: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        // endregion: DoipConnection Constants
+    // region: DoipConnection Constants
+    const MAX_TARGETS: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
+    // endregion: DoipConnection Constants
 
-        // region: Target Constants
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_TARGET_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-        // endregion: Target Constants
-    >
+    // region: Target Constants
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_TARGET_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+    // endregion: Target Constants
+>
     DoipConnection<
         MAX_TARGETS,
         TCP_MAX_FRAME,
         TCP_MAX_OUTBOX,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         PENDING,
         SIM_MAX_FRAME,
         SIM_MAX_OUTBOX,
@@ -367,17 +372,20 @@ impl<
     // region: Target Management
 
     /// Ensures a UdsClient exists for the given target address. No-op if already registered.
-    pub fn ensure_target(&mut self, target_address: u16) {
+    pub fn ensure_target(&mut self, target_address: u16) -> Result<(), DoipTesterError> {
         if self.targets.iter().any(|t| t.address == target_address) {
-            return;
+            return Ok(());
         }
 
-        let _ = self.targets.push(TargetState::new(
-            target_address,
-            self.config.default_p2,
-            self.config.default_p2_star,
-            self.config.timing_tolerance,
-        ));
+        self.targets
+            .push(TargetState::new(
+                self.tester_address,
+                target_address,
+                self.config.default_p2,
+                self.config.default_p2_star,
+                self.config.timing_tolerance,
+            ))
+            .map_err(|_| DoipTesterError::TooManyTargets)
     }
 
     fn find_target_mut(
@@ -424,34 +432,34 @@ impl<
         self.send_routing_activation()
     }
 
-    pub fn on_reset(&mut self) {
+    pub fn on_reset(&mut self) -> Result<(), DoipTesterError> {
         self.phase = DoipConnectionPhase::Failed;
-
-        let _ = self.events.push((
-            self.connection_id(),
-            TargetId(0),
-            DoipTesterEvent::ConnectionReset,
-        ));
+        self.emit(TargetId(0), DoipTesterEvent::ConnectionReset)
     }
 
-    pub fn on_refused(&mut self) {
+    pub fn on_refused(&mut self) -> Result<(), DoipTesterError> {
         self.phase = DoipConnectionPhase::Failed;
-
-        let _ = self.events.push((
-            self.connection_id(),
-            TargetId(0),
-            DoipTesterEvent::ConnectionRefused,
-        ));
+        self.emit(TargetId(0), DoipTesterEvent::ConnectionRefused)
     }
 
-    pub fn on_timeout(&mut self) {
+    pub fn on_timeout(&mut self) -> Result<(), DoipTesterError> {
         self.phase = DoipConnectionPhase::Failed;
+        self.emit(TargetId(0), DoipTesterEvent::ConnectionTimeout)
+    }
 
-        let _ = self.events.push((
-            self.connection_id(),
-            TargetId(0),
-            DoipTesterEvent::ConnectionTimeout,
-        ));
+    /// Records an observed event for the caller to drain.
+    ///
+    /// Fails rather than dropping. The event queue is how a caller learns what the
+    /// connection saw, so a discarded event leaves them unable to distinguish a reset
+    /// link from a quiet one.
+    fn emit(
+        &mut self,
+        target: TargetId,
+        event: DoipTesterEvent<MAX_DATA>,
+    ) -> Result<(), DoipTesterError> {
+        self.events
+            .push((self.connection_id(), target, event))
+            .map_err(|_| DoipTesterError::EventBufferOverflow)
     }
 
     // endregion: Lifecycle
@@ -469,7 +477,7 @@ impl<
             return Err(DoipTesterError::NotReady);
         }
 
-        self.ensure_target(target_address);
+        self.ensure_target(target_address)?;
 
         let target = self
             .find_target_mut(target_address)
@@ -483,11 +491,19 @@ impl<
         self.send_diagnostic_message(target_address, uds_data)
     }
 
-    pub fn subscribe_periodic(&mut self, target_address: u16, did_low_byte: u8) {
-        self.ensure_target(target_address);
+    pub fn subscribe_periodic(
+        &mut self,
+        target_address: u16,
+        did_low_byte: u8,
+    ) -> Result<(), DoipTesterError> {
+        self.ensure_target(target_address)?;
 
-        if let Some(t) = self.find_target_mut(target_address) {
-            t.client.subscribe_periodic(did_low_byte);
+        match self.find_target_mut(target_address) {
+            Some(t) => t
+                .client
+                .subscribe_periodic(did_low_byte)
+                .map_err(DoipTesterError::Client),
+            None => Err(DoipTesterError::TooManyTargets),
         }
     }
 
@@ -523,13 +539,17 @@ impl<
 
     // region: Tick
 
-    pub fn tick(&mut self, now: Instant) {
+    /// Returns `Err` if a bounded buffer could not absorb what was drained into
+    /// it. Fallible for the same reason `UdsServer::tick` and `UdsClient::tick`
+    /// are: a tick that cannot report failure can only drop it.
+    pub fn tick(&mut self, now: Instant) -> Result<(), DoipTesterError> {
         let connection_id = self.connection_id();
 
         for target in self.targets.iter_mut() {
             let _ = target.client.tick(now);
             let uds_events: Vec<ClientEvent<MAX_DATA>, MAX_TARGET_EVENTS> =
-                target.client.drain_events().collect();
+                Vec::from_iter_checked(target.client.drain_events())
+                    .map_err(|_| DoipTesterError::EventBufferOverflow)?;
 
             // Note: a DiagnosticSessionControl positive response (SID 0x10)
             // is never observed here. It arrives via on_diagnostic_message
@@ -539,13 +559,19 @@ impl<
             // events (e.g. Timeout), so a SID-0x10 check here would be dead
             // code by construction.
             for e in uds_events {
-                let _ = self.events.push((
-                    connection_id,
-                    TargetId(target.address),
-                    DoipTesterEvent::Uds(e),
-                ));
+                // Pushed through the field rather than `emit`: `self.targets` is
+                // borrowed mutably by the loop, so a `&mut self` method would clash.
+                self.events
+                    .push((
+                        connection_id,
+                        TargetId(target.address),
+                        DoipTesterEvent::Uds(e),
+                    ))
+                    .map_err(|_| DoipTesterError::EventBufferOverflow)?;
             }
         }
+
+        Ok(())
     }
 
     // endregion: Tick
@@ -555,14 +581,21 @@ impl<
     pub fn drain_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
+        // Refused before draining rather than during: the source is emptied as it is
+        // read, so a partial move would lose the remainder with no way to recover it.
+        if self.outbox.len() > out.capacity() - out.len() {
+            return Err(CapacityError);
+        }
+
         let n = self.outbox.len();
 
         for item in self.outbox.drain(..) {
+            // Cannot fail: capacity checked above.
             let _ = out.push(item);
         }
 
-        n
+        Ok(n)
     }
 
     pub fn drain_events(
@@ -588,21 +621,13 @@ impl<
             ActivationCode::SuccessfullyActivated => {
                 self.phase = DoipConnectionPhase::Active;
 
-                let _ = self.events.push((
-                    self.connection_id(),
-                    TargetId(0),
-                    DoipTesterEvent::ActivationSucceeded,
-                ));
+                self.emit(TargetId(0), DoipTesterEvent::ActivationSucceeded)?;
             }
             _ => {
                 let code = resp.activation_code.into();
                 self.phase = DoipConnectionPhase::Failed;
 
-                let _ = self.events.push((
-                    self.connection_id(),
-                    TargetId(0),
-                    DoipTesterEvent::ActivationDenied { code },
-                ));
+                self.emit(TargetId(0), DoipTesterEvent::ActivationDenied { code })?;
             }
         }
 
@@ -615,7 +640,7 @@ impl<
         now: Instant,
     ) -> Result<(), DoipTesterError> {
         let source = u16::from_be_bytes([
-            payload_data.get(0).copied().unwrap_or(0),
+            payload_data.first().copied().unwrap_or(0),
             payload_data.get(1).copied().unwrap_or(0),
         ]);
         let uds_data = payload_data.get(4..).unwrap_or(&[]);
@@ -624,18 +649,24 @@ impl<
             return Ok(());
         }
 
-        self.ensure_target(source);
+        self.ensure_target(source)?;
 
         let conn_id = self.connection_id();
-        let target_id = TargetId(u16::from(source));
+        let target_id = TargetId(source);
+        let tester_address = self.tester_address;
 
         if let Some(target) = self.find_target_mut(source) {
-            let _ = target
-                .client
-                .handle(&NodeAddress(source as u32), uds_data, now);
+            // Addressed to us: a response arrives at the tester's own address.
+            let frame = InboundFrame::new(
+                NodeAddress(source as u32),
+                NodeAddress(u32::from(tester_address)),
+                uds_data,
+            );
+            let _ = target.client.handle(&frame, now);
 
             let client_events: Vec<ClientEvent<MAX_DATA>, MAX_TARGET_EVENTS> =
-                target.client.drain_events().collect();
+                Vec::from_iter_checked(target.client.drain_events())
+                    .map_err(|_| DoipTesterError::EventBufferOverflow)?;
 
             // The DSC response is delivered here, on the frame-arrival path
             // - never through tick(), which only re-drains target.client's
@@ -661,18 +692,18 @@ impl<
 
     fn on_diagnostic_nack(&mut self, payload_data: &[u8]) -> Result<(), DoipTesterError> {
         let source = u16::from_be_bytes([
-            payload_data.get(0).copied().unwrap_or(0),
+            payload_data.first().copied().unwrap_or(0),
             payload_data.get(1).copied().unwrap_or(0),
         ]);
         let mut buf: Vec<u8, MAX_DATA> = Vec::new();
 
-        let _ = buf.extend_from_slice(&payload_data[..payload_data.len().min(MAX_DATA)]);
+        buf.extend_from_slice(payload_data)
+            .map_err(|_| DoipTesterError::FrameTooLong)?;
 
-        let _ = self.events.push((
-            self.connection_id(),
+        self.emit(
             TargetId(source),
             DoipTesterEvent::Uds(ClientEvent::Unsolicited { data: buf }),
-        ));
+        )?;
 
         Ok(())
     }
@@ -737,30 +768,25 @@ impl<
 
         let mut frame: Vec<u8, TCP_MAX_FRAME> = Vec::new();
 
-        if frame.len() + header_len > TCP_MAX_FRAME {
-            return Err(DoipTesterError::Codec);
-        }
-        frame.extend_from_slice(&header_staging[..header_len]);
+        frame
+            .extend_from_slice(&header_staging[..header_len])
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        if frame.len() + 2 > TCP_MAX_FRAME {
-            return Err(DoipTesterError::Codec);
-        }
-        frame.extend_from_slice(&self.tester_address.to_be_bytes());
+        frame
+            .extend_from_slice(&self.tester_address.to_be_bytes())
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        if frame.len() + 2 > TCP_MAX_FRAME {
-            return Err(DoipTesterError::Codec);
-        }
-        frame.extend_from_slice(&target_address.to_be_bytes());
+        frame
+            .extend_from_slice(&target_address.to_be_bytes())
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        if frame.len() + uds_data.len() > TCP_MAX_FRAME {
-            return Err(DoipTesterError::Codec);
-        }
-        frame.extend_from_slice(uds_data);
+        frame
+            .extend_from_slice(uds_data)
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        if self.outbox.len() >= TCP_MAX_OUTBOX {
-            return Err(DoipTesterError::OutboxFull);
-        }
-        let _ = self.outbox.push((gateway, frame));
+        self.outbox
+            .push((gateway, frame))
+            .map_err(|_| DoipTesterError::OutboxFull)?;
 
         Ok(())
     }
@@ -792,20 +818,17 @@ impl<
         let header_len = 8 - header_slice.len();
         let mut frame: Vec<u8, TCP_MAX_FRAME> = Vec::new();
 
-        if frame.len() + header_len > TCP_MAX_FRAME {
-            return Err(DoipTesterError::Codec);
-        }
-        frame.extend_from_slice(&header_staging[..header_len]);
+        frame
+            .extend_from_slice(&header_staging[..header_len])
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        if frame.len() + payload_len > TCP_MAX_FRAME {
-            return Err(DoipTesterError::Codec);
-        }
-        frame.extend_from_slice(&payload_staging[..payload_len]);
+        frame
+            .extend_from_slice(&payload_staging[..payload_len])
+            .map_err(|_| DoipTesterError::Codec)?;
 
-        if self.outbox.len() >= TCP_MAX_OUTBOX {
-            return Err(DoipTesterError::OutboxFull);
-        }
-        let _ = self.outbox.push((gateway, frame));
+        self.outbox
+            .push((gateway, frame))
+            .map_err(|_| DoipTesterError::OutboxFull)?;
 
         Ok(())
     }
@@ -854,7 +877,7 @@ pub struct DoipTester<
     const MAX_TARGETS: usize,
     const TCP_MAX_FRAME: usize,
     const TCP_MAX_OUTBOX: usize,
-    const MAX_CONNECTION_EVENTS: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
     // endregion: DoipConnection Constants
 
     // region: Target Constants
@@ -876,7 +899,7 @@ pub struct DoipTester<
             MAX_TARGETS,
             TCP_MAX_FRAME,
             TCP_MAX_OUTBOX,
-            MAX_CONNECTION_EVENTS,
+            MAX_CONNECTION_ACTIONS,
             PENDING,
             SIM_MAX_FRAME,
             SIM_MAX_OUTBOX,
@@ -892,24 +915,24 @@ pub struct DoipTester<
 }
 
 impl<
-        const MAX_CONNECTIONS: usize,
-        const MAX_TARGETS: usize,
-        const TCP_MAX_FRAME: usize,
-        const TCP_MAX_OUTBOX: usize,
-        const MAX_CONNECTION_EVENTS: usize,
-        const PENDING: usize,
-        const SIM_MAX_FRAME: usize,
-        const SIM_MAX_OUTBOX: usize,
-        const MAX_TARGET_EVENTS: usize,
-        const PERIODIC_DIDS: usize,
-        const MAX_DATA: usize,
-    >
+    const MAX_CONNECTIONS: usize,
+    const MAX_TARGETS: usize,
+    const TCP_MAX_FRAME: usize,
+    const TCP_MAX_OUTBOX: usize,
+    const MAX_CONNECTION_ACTIONS: usize,
+    const PENDING: usize,
+    const SIM_MAX_FRAME: usize,
+    const SIM_MAX_OUTBOX: usize,
+    const MAX_TARGET_EVENTS: usize,
+    const PERIODIC_DIDS: usize,
+    const MAX_DATA: usize,
+>
     DoipTester<
         MAX_CONNECTIONS,
         MAX_TARGETS,
         TCP_MAX_FRAME,
         TCP_MAX_OUTBOX,
-        MAX_CONNECTION_EVENTS,
+        MAX_CONNECTION_ACTIONS,
         PENDING,
         SIM_MAX_FRAME,
         SIM_MAX_OUTBOX,
@@ -966,7 +989,7 @@ impl<
             MAX_TARGETS,
             TCP_MAX_FRAME,
             TCP_MAX_OUTBOX,
-            MAX_CONNECTION_EVENTS,
+            MAX_CONNECTION_ACTIONS,
             PENDING,
             SIM_MAX_FRAME,
             SIM_MAX_OUTBOX,
@@ -986,7 +1009,7 @@ impl<
             MAX_TARGETS,
             TCP_MAX_FRAME,
             TCP_MAX_OUTBOX,
-            MAX_CONNECTION_EVENTS,
+            MAX_CONNECTION_ACTIONS,
             PENDING,
             SIM_MAX_FRAME,
             SIM_MAX_OUTBOX,
@@ -1048,9 +1071,10 @@ impl<
         connection_id: ConnectionId,
         target_address: u16,
         did_low_byte: u8,
-    ) {
-        if let Some(conn) = self.find_conn_mut(connection_id) {
-            conn.subscribe_periodic(target_address, did_low_byte);
+    ) -> Result<(), DoipTesterError> {
+        match self.find_conn_mut(connection_id) {
+            Some(conn) => conn.subscribe_periodic(target_address, did_low_byte),
+            None => Err(DoipTesterError::UnknownConnection),
         }
     }
 
@@ -1058,20 +1082,29 @@ impl<
 
     // region: SimNode Surface
 
+    /// Handles a DoIP frame seen on the TCP segment.
+    ///
+    /// Ignores frames addressed elsewhere, rather than trusting the caller to have
+    /// filtered. With every frame on the segment offered to every node, a tester that
+    /// accepted whatever it was handed would consume another tester's responses.
     pub fn handle(
         &mut self,
-        src: &NodeAddress,
-        data: &[u8],
+        inbound: &InboundFrame<'_>,
         now: Instant,
     ) -> Result<(), DoipTesterError> {
-        let gateway_address = src.0 as u16;
+        if inbound.dst.0 != self.address.0 {
+            return Ok(());
+        }
+
+        let data = inbound.data;
+        let gateway_address = inbound.src.0 as u16;
 
         let frame = DoipFrame::from_slice(data);
-        if frame.validate_header().is_ok() {
-            if let Some(Ok(payload_type)) = frame.payload_type() {
-                let payload_data = frame.payload_bytes().unwrap_or(&[]);
-                self.handle_profile_frame(gateway_address, payload_type, payload_data);
-            }
+        if frame.validate_header().is_ok()
+            && let Some(Ok(payload_type)) = frame.payload_type()
+        {
+            let payload_data = frame.payload_bytes().unwrap_or(&[]);
+            self.handle_profile_frame(gateway_address, payload_type, payload_data);
         }
 
         if let Some(conn) = self.find_conn_by_gateway_mut(gateway_address) {
@@ -1081,78 +1114,102 @@ impl<
         Ok(())
     }
 
-    pub fn tick(&mut self, now: Instant) {
+    /// Fallible so a per-connection tick failure is reported rather than dropped.
+    pub fn tick(&mut self, now: Instant) -> Result<(), DoipTesterError> {
         for conn in self.connections.iter_mut() {
-            conn.tick(now);
+            conn.tick(now)?;
         }
+
+        Ok(())
     }
 
     pub fn drain_outbox(
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, TCP_MAX_FRAME>), TCP_MAX_OUTBOX>,
-    ) -> usize {
+    ) -> Result<usize, CapacityError> {
         let mut total = 0;
 
+        // Each connection's drain is all-or-nothing, but this aggregate is not: an
+        // earlier connection may already have moved its frames before a later one
+        // finds `out` full. The count returned on success is therefore exact, and on
+        // failure the caller must treat `out` as holding an unknown prefix.
         for conn in self.connections.iter_mut() {
-            total += conn.drain_outbox(out);
+            total += conn.drain_outbox(out)?;
         }
 
-        total
+        Ok(total)
     }
 
     // endregion: SimNode Surface
 
-    // region: TcpEventHandler
+    // region: LinkEvent dispatch
 
-    pub fn on_tcp_event(&mut self, event: &TcpEvent, now: Instant) {
-        match event {
-            TcpEvent::ConnectionEstablished { to, .. } => {
-                let gateway = to.0 as u16;
-                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
-                    let _ = conn.on_connected(now);
-                }
-            }
-            TcpEvent::ConnectionReset { to, .. } => {
-                let gateway = to.0 as u16;
-                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
-                    conn.on_reset();
-                }
-            }
-            TcpEvent::ConnectionRefused { to, .. } => {
-                let gateway = to.0 as u16;
-                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
-                    conn.on_refused();
-                }
-            }
-            TcpEvent::ConnectionTimeout { to, .. } => {
-                let gateway = to.0 as u16;
-                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
-                    conn.on_timeout();
-                }
-            }
-            TcpEvent::ConnectionClosed { .. } => {}
+    pub fn on_tcp_event(&mut self, event: &LinkEvent, now: Instant) -> Result<(), DoipTesterError> {
+        // Link events are delivered to every node on the simulated segment, just like
+        // frames. A tester must consume only transitions for the connection it owns;
+        // otherwise a second tester's ConnectionEstablished event makes this tester
+        // send a duplicate routing activation on its own connection, which the gateway
+        // correctly treats as AlreadyConnected and deactivates.
+        let belongs_to_this_tester = match event {
+            LinkEvent::ConnectionEstablished { from, .. }
+            | LinkEvent::ConnectionRefused { from, .. }
+            | LinkEvent::ConnectionTimeout { from, .. }
+            | LinkEvent::ConnectionReset { from, .. }
+            | LinkEvent::ConnectionClosed { from, .. } => from.0 == self.address.0,
+        };
+
+        if !belongs_to_this_tester {
+            return Ok(());
         }
+
+        match event {
+            LinkEvent::ConnectionEstablished { to, .. } => {
+                let gateway = to.0 as u16;
+                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
+                    conn.on_connected(now)?;
+                }
+            }
+            LinkEvent::ConnectionReset { to, .. } => {
+                let gateway = to.0 as u16;
+                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
+                    conn.on_reset()?;
+                }
+            }
+            LinkEvent::ConnectionRefused { to, .. } => {
+                let gateway = to.0 as u16;
+                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
+                    conn.on_refused()?;
+                }
+            }
+            LinkEvent::ConnectionTimeout { to, .. } => {
+                let gateway = to.0 as u16;
+                if let Some(conn) = self.find_conn_by_gateway_mut(gateway) {
+                    conn.on_timeout()?;
+                }
+            }
+            LinkEvent::ConnectionClosed { .. } => {}
+        }
+
+        Ok(())
     }
 
-    // endregion: TcpEventHandler
+    // endregion: LinkEvent dispatch
 
     // region: Event API
 
+    /// Drains every connection's observed events.
+    ///
+    /// Chains the per-connection queues lazily rather than copying into an
+    /// intermediate buffer. The previous implementation aggregated into a `Vec`
+    /// bounded by `MAX_CONNECTION_ACTIONS` - a constant describing a *single*
+    /// connection's pending actions - so a tester with several busy connections
+    /// silently discarded the overflow. There is no aggregate bound to get wrong now.
     pub fn drain_events(
         &mut self,
     ) -> impl Iterator<Item = (ConnectionId, TargetId, DoipTesterEvent<MAX_DATA>)> + '_ {
-        let mut all: Vec<
-            (ConnectionId, TargetId, DoipTesterEvent<MAX_DATA>),
-            MAX_CONNECTION_EVENTS,
-        > = Vec::new();
-
-        for conn in self.connections.iter_mut() {
-            for ev in conn.drain_events() {
-                let _ = all.push(ev);
-            }
-        }
-
-        all.into_iter()
+        self.connections
+            .iter_mut()
+            .flat_map(|conn| conn.drain_events())
     }
 
     pub fn connection_phase(&self, id: ConnectionId) -> Option<&DoipConnectionPhase> {
@@ -1226,8 +1283,18 @@ pub enum DoipTesterError {
     Codec,
     OutboxFull,
     TooManyConnections,
+
+    /// The per-connection target table is full, so an ECU target could not be
+    /// registered. Reported rather than dropped: an unregistered target silently
+    /// discards every request addressed to it.
+    TooManyTargets,
     DuplicateConnection,
     UnknownConnection,
+    /// A bounded event buffer could not hold everything drained into it.
+    EventBufferOverflow,
+
+    /// Received data exceeded the bounded buffer it was being assembled into.
+    FrameTooLong,
     Client(ClientError),
 }
 

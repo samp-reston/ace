@@ -1,7 +1,8 @@
 [package]
 name = "ace-client"
-version = "0.5.5"
+version = "0.6.0"
 edition = "2024"
+rust-version = "1.88"
 authors = ["Samuel Preston <samp.reston@outlook.com>"]
 description = "UDS tester client state machine."
 readme = "README.md"
@@ -12,21 +13,20 @@ categories = ["development-tools", "network-programming", "automotive"]
 
 [features]
 default = []
-alloc = ["ace-core/alloc", "ace-uds/alloc", "ace-proto/alloc", "ace-sim/alloc"]
+alloc = ["ace-core/alloc", "ace-uds/alloc", "ace-proto/alloc"]
 std = [
 	"alloc",
 	"ace-core/std",
 	"ace-uds/std",
-	"ace-sim/std",
+	
 	"ace-proto/std",
-	"ace-sim/std",
+	
 ]
 
 [dependencies]
 ace-core = { workspace = true }
 ace-proto = { workspace = true }
 ace-uds = { workspace = true }
-ace-sim = { workspace = true }
 
 [dev-dependencies]
 ace-server = { workspace = true }

@@ -85,16 +85,37 @@ impl<const MAX_NODES: usize, const MAX_TESTERS: usize, const MAX_ACTIVATION_TYPE
     }
 
     pub fn with_node(mut self, node: CanNodeEntry) -> Self {
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.nodes.is_full(),
+            "more entries configured than MAX_NODES allows"
+        );
         let _ = self.nodes.push(node);
         self
     }
 
     pub fn with_tester(mut self, address: u16) -> Self {
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.registered_testers.is_full(),
+            "more entries configured than MAX_TESTERS allows"
+        );
         let _ = self.registered_testers.push(address);
         self
     }
 
     pub fn with_activation_type(mut self, activation_type: ActivationType) -> Self {
+        // Silently ignoring this would leave the caller believing it is
+        // configured. The entry is absent at runtime instead, so the assertion
+        // catches the over-declaration in a debug build.
+        debug_assert!(
+            !self.supported_activation_types.is_full(),
+            "more entries configured than MAX_ACTIVATION_TYPES allows"
+        );
         let _ = self.supported_activation_types.push(activation_type);
         self
     }

@@ -40,15 +40,27 @@ pub struct CanFaultConfig {
     /// Probability the bus enters bus-off state on any given tick. When bus-off, all frames are
     /// dropped until `reset_bus_off()`.
     pub bus_off: (u32, u32),
+
+    /// Nominal bus bit rate, in bits per second.
+    ///
+    /// Determines the baseline transmission time added to every frame before any fault-injected
+    /// delay. Without this, `deliver_at` defaulted to the send time and a frame arrived on the
+    /// very next `tick()` regardless of size or rate - so an 8-byte frame and a full 4095-byte
+    /// ISO-TP transfer took equally long, and STmin/P2 timing bugs had no timing to expose them.
+    pub bit_rate: u32,
 }
 
 impl CanFaultConfig {
+    /// Classic CAN at 500 kbit/s - the common automotive default.
+    const DEFAULT_BIT_RATE: u32 = 500_000;
+
     pub fn none() -> Self {
         Self {
             message: FaultConfig::none(),
             arbitration_loss: (0, 1),
             bit_error: (0, 1),
             bus_off: (0, 1),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 
@@ -58,6 +70,7 @@ impl CanFaultConfig {
             arbitration_loss: (1, 200),
             bit_error: (1, 200),
             bus_off: (1, 200),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 
@@ -67,6 +80,7 @@ impl CanFaultConfig {
             arbitration_loss: (1, 10),
             bit_error: (1, 10),
             bus_off: (1, 10),
+            bit_rate: Self::DEFAULT_BIT_RATE,
         }
     }
 }
@@ -123,6 +137,13 @@ pub enum CanEvent {
 ///
 /// `N` - max frame payload bytes (8 for classic CAN, 64 for CAN FD)
 /// `Q` - max frames in-flight simultaneously
+/// Capacity of the bus event queue.
+///
+/// Whoever drives the bus drains events into a buffer of exactly this size, so the two
+/// must agree. Naming it once keeps that invariant expressible instead of duplicating a
+/// literal across two files.
+pub const CAN_MAX_EVENTS: usize = 16;
+
 #[derive(Debug)]
 pub struct CanSimBus<const MAX_DATA: usize, const MAX_QUEUED: usize> {
     /// Underlying message bus.
@@ -135,7 +156,7 @@ pub struct CanSimBus<const MAX_DATA: usize, const MAX_QUEUED: usize> {
     bus_state: CanBusState,
 
     /// Accumulated CAN events for nodes to drain.
-    events: Vec<CanEvent, 16>,
+    events: Vec<CanEvent, CAN_MAX_EVENTS>,
 
     /// Dedicated RNG for CAN-level fault decisions.
     rng: Xorshift64,
@@ -178,11 +199,27 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
             .rng
             .chance(self.can_faults.bit_error.0, self.can_faults.bit_error.1)
         {
-            let _ = self.events.push(CanEvent::BitError { src: src.clone() });
+            self.emit(CanEvent::BitError { src: src.clone() });
             return false;
         }
 
-        self.inner.send(src, dst, data)
+        self.inner
+            .send_with_min_latency(src, dst, data, self.transmission_time(data.len()))
+    }
+
+    /// Time to put a frame of `payload_len` bytes on the bus at the configured bit rate.
+    ///
+    /// Includes the classical CAN 2.0A/B fixed overhead (arbitration ID, control, CRC, ACK,
+    /// EOF, inter-frame spacing - 47 bits for an 11-bit identifier) on top of 8 bits per
+    /// payload byte. Approximate rather than exact to the bit-stuffing rules, which are
+    /// data-dependent, but the fixed overhead dominates for the short frames ISO-TP sends.
+    fn transmission_time(&self, payload_len: usize) -> Duration {
+        const FIXED_OVERHEAD_BITS: u64 = 47;
+
+        let bits = FIXED_OVERHEAD_BITS + (payload_len as u64) * 8;
+        let bit_rate = self.can_faults.bit_rate.max(1) as u64;
+
+        Duration::from_micros(bits.saturating_mul(1_000_000) / bit_rate)
     }
 
     // endregion: Message Delivery
@@ -195,14 +232,14 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
 
         self.bus_state = CanBusState::BusOff { since: now };
 
-        let _ = self.events.push(CanEvent::BusOff);
+        self.emit(CanEvent::BusOff);
     }
 
     /// Resets the bus from bus-off state back to Active.
     pub fn reset_bus_off(&mut self) {
         if matches!(self.bus_state, CanBusState::BusOff { .. }) {
             self.bus_state = CanBusState::Active;
-            let _ = self.events.push(CanEvent::BusRecovered);
+            self.emit(CanEvent::BusRecovered);
         }
     }
 
@@ -216,17 +253,16 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
 
     /// Advances simulation time, delivers due frames, and checks bus-off fault injection.
     pub fn tick(&mut self, duration: Duration) -> Vec<Envelope<MAX_DATA>, MAX_QUEUED> {
-        if self.bus_state.is_operational() {
-            if self
+        if self.bus_state.is_operational()
+            && self
                 .rng
                 .chance(self.can_faults.bus_off.0, self.can_faults.bus_off.1)
-            {
-                let now = self.inner.now();
+        {
+            let now = self.inner.now();
 
-                self.bus_state = CanBusState::BusOff { since: now };
+            self.bus_state = CanBusState::BusOff { since: now };
 
-                let _ = self.events.push(CanEvent::BusOff);
-            }
+            self.emit(CanEvent::BusOff);
         }
 
         if !self.bus_state.is_operational() {
@@ -246,6 +282,18 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
     }
 
     /// Drains accumulated CAN events.
+    /// Records a CAN bus event for the runner to drain.
+    ///
+    /// Panics when the queue is full. This is harness code, and the queue is sized
+    /// to what the runner drains each tick, so overflow means the scenario outgrew
+    /// its configuration. Dropping the event instead would let the run complete -
+    /// just not the run that was asked for, with no signal that it diverged.
+    fn emit(&mut self, event: CanEvent) {
+        self.events
+            .push(event)
+            .expect("CAN bus event queue overflowed, which would alter the run");
+    }
+
     pub fn drain_events(&mut self) -> impl Iterator<Item = CanEvent> + '_ {
         self.events.drain(..)
     }

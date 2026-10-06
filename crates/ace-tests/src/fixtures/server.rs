@@ -1,16 +1,14 @@
 // region: Imports
 
-use aced::core::Vec;
-use aced::server::{
+use ace_core::Vec;
+use ace_server::{
+    BuiltinNrc,
     config::{DidConfig, SecurityLevelConfig, ServerConfig, ServiceConfig, SessionConfig},
     handler::ServerHandler,
     security_provider::{SecurityError, SecurityProvider},
     server::UdsServer,
-    BuiltinNrc,
 };
-use aced::sim::{clock::Duration, io::NodeAddress};
-
-use crate::harness::MyUdsServer;
+use ace_sim::{clock::Duration, io::NodeAddress};
 
 // endregion: Imports
 
@@ -33,10 +31,14 @@ impl TestHandler {
     pub fn set_did(&mut self, id: u16, data: &[u8]) {
         if let Some(entry) = self.dids.iter_mut().find(|(d, _)| *d == id) {
             entry.1.clear();
-            let _ = entry.1.extend_from_slice(&data[..data.len().min(64)]);
+            entry
+                .1
+                .extend_from_slice(data)
+                .expect("DID value exceeds the fixture buffer");
         } else {
             let mut buf: Vec<u8, 64> = Vec::new();
-            let _ = buf.extend_from_slice(&data[..data.len().min(64)]);
+            buf.extend_from_slice(data)
+                .expect("DID value exceeds the fixture buffer");
 
             let _ = self.dids.push((id, buf));
         }
@@ -67,7 +69,10 @@ impl ServerHandler for TestHandler {
     fn write_did(&mut self, did: u16, data: &[u8]) -> Result<(), Self::Error> {
         if let Some(entry) = self.dids.iter_mut().find(|(d, _)| *d == did) {
             entry.1.clear();
-            let _ = entry.1.extend_from_slice(&data[..data.len().min(64)]);
+            entry
+                .1
+                .extend_from_slice(data)
+                .map_err(|_| BuiltinNrc::RequestOutOfRange)?;
 
             Ok(())
         } else {
@@ -96,7 +101,7 @@ impl SecurityProvider for TestSecurityProvider {
         &mut self,
         level: u8,
         buf: &mut [u8],
-    ) -> Result<usize, aced::server::security_provider::SecurityError> {
+    ) -> Result<usize, ace_server::security_provider::SecurityError> {
         if buf.is_empty() {
             return Err(SecurityError::InvalidKey);
         }

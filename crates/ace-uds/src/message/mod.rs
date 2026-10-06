@@ -2,12 +2,12 @@ pub mod payload;
 pub mod service;
 pub mod services;
 
-use ace_core::{DiagError, FrameRead, FrameWrite};
+use ace_core::{CodecError, FrameRead, FrameWrite};
 pub use payload::UdsPayload;
 pub use service::ServiceIdentifier;
 pub use services::*;
 
-use crate::{constants::MIN_FRAME_LEN, UdsError, ValidationError};
+use crate::{UdsError, ValidationError, constants::MIN_FRAME_LEN};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UdsMessage<'a> {
@@ -58,7 +58,7 @@ impl FrameWrite for UdsMessage<'_> {
     fn encode<W: ace_core::codec::Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
         if let Some(sid) = &self.sid {
             sid.encode(buf).map_err(|e| {
-                let d: DiagError = e.into();
+                let d: CodecError = e.into();
                 UdsError::from(d)
             })?;
         }

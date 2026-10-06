@@ -1,53 +1,31 @@
+//! Simulation harness over [`DiagnosticNode`].
+//!
+//! The node trait itself is a foundation abstraction and lives in `ace-core`.
+//! What remains here is harness behaviour: [`SimNodeErased`] discards node errors
+//! so a simulation run continues past a fault, which is deliberately *not* a
+//! library contract, and [`SimRunner`] schedules nodes over a [`SimBus`].
+
 // region: Imports
 
 use crate::bus::SimBus;
 use crate::clock::{Duration, Instant};
-use crate::io::NodeAddress;
+use crate::io::{InboundFrame, NodeAddress};
 use ace_core::Vec;
+
+pub use ace_core::node::DiagnosticNode;
 
 // endregion: Imports
 
-// region: SimNode Trait
-
-/// A participant in the simulation - either a sever (ECU) or client (tester).
-///
-/// Each node is a pure state machine. It receives messages via `handle`, produces outbound
-/// messages via `drain_outbox`, and can be ticket for time-based state transitions.
-///
-/// `N` - max message payload bytes
-/// `Q` - max messages in outbox simultaneously
-pub trait SimNode<const MAX_FRAME: usize, const MAX_OUTBOX: usize> {
-    type Error: core::fmt::Debug;
-
-    /// Returns this node's address on the simulation bus.
-    fn address(&self) -> &NodeAddress;
-
-    /// Delivers an inbound message to the node.
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) -> Result<(), Self::Error>;
-
-    /// Advances the node's internal state to the given time.
-    ///
-    /// Used to trigger timeouts and retries. Called by the simulation bus on every tick even if no
-    /// messages were delivered.
-    fn tick(&mut self, now: Instant) -> Result<(), Self::Error>;
-
-    /// Drains all pending outbound messages from the node's outbox.
-    ///
-    /// Return an iterator of `(dst, data)` pairs. The bus calls this after every `handle` and
-    /// `tick` call to collect and route output.
-    fn drain_outbox(
-        &mut self,
-        out: &mut Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
-    ) -> usize;
-}
-
-// endregion: SimNode Trait
-
 // region: SimNodeErased Trait
 
+/// Object-safe view of a [`DiagnosticNode`] with its error type erased.
+///
+/// Exists so the runner can hold a heterogeneous slice of nodes whose `Error`
+/// types differ. Errors are swallowed to keep a simulation running - never use
+/// this on a path where a node error matters.
 pub trait SimNodeErased<const MAX_FRAME: usize, const MAX_OUTBOX: usize> {
     fn address(&self) -> &NodeAddress;
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant);
+    fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant);
     fn tick(&mut self, now: Instant);
     fn drain_outbox(
         &mut self,
@@ -55,18 +33,18 @@ pub trait SimNodeErased<const MAX_FRAME: usize, const MAX_OUTBOX: usize> {
     ) -> usize;
 }
 
-/// Blanket impl - any SimNode becomes a SimNodeErased by discarding errors.
+/// Blanket impl - any DiagnosticNode becomes a SimNodeErased by discarding errors.
 impl<const MAX_FRAME: usize, const MAX_OUTBOX: usize, T> SimNodeErased<MAX_FRAME, MAX_OUTBOX> for T
 where
-    T: SimNode<MAX_FRAME, MAX_OUTBOX>,
+    T: DiagnosticNode<MAX_FRAME, MAX_OUTBOX>,
     T::Error: core::fmt::Debug,
 {
     fn address(&self) -> &NodeAddress {
-        SimNode::address(self)
+        DiagnosticNode::address(self)
     }
 
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) {
-        if let Err(e) = SimNode::handle(self, src, data, now) {
+    fn handle(&mut self, frame: &InboundFrame<'_>, now: Instant) {
+        if let Err(e) = DiagnosticNode::handle(self, frame, now) {
             // In no_std we cannot print but the error is available for
             // inspection via a debugger or a custom hook. Errors are
             // intentionally swallowed here - the simulation continues.
@@ -75,7 +53,7 @@ where
     }
 
     fn tick(&mut self, now: Instant) {
-        if let Err(e) = SimNode::tick(self, now) {
+        if let Err(e) = DiagnosticNode::tick(self, now) {
             let _ = e;
         }
     }
@@ -84,7 +62,12 @@ where
         &mut self,
         out: &mut Vec<(NodeAddress, Vec<u8, MAX_FRAME>), MAX_OUTBOX>,
     ) -> usize {
-        SimNode::drain_outbox(self, out)
+        // Unlike `handle` and `tick`, this failure is not a node protocol error to be
+        // swallowed - it means the harness gave the node too small a buffer. Losing
+        // outbound messages would change what a deterministic run observes, so fail
+        // loudly instead of continuing with a silently shortened run.
+        DiagnosticNode::drain_outbox(self, out)
+            .expect("outbox buffer smaller than the node's outbox")
     }
 }
 
@@ -92,11 +75,10 @@ where
 
 // region: SimRunner
 
-/// Drives a collection of [`SimNode`]s connected via a [`SimBus`].
+/// Drives a collection of [`DiagnosticNode`]s connected via a [`SimBus`].
 ///
 /// `N` - max message payload bytes
 /// `Q` - max messages in-flight on the bus
-/// `S` - max nodes in the simulation
 pub struct SimRunner<const N: usize, const Q: usize> {
     bus: SimBus<N, Q>,
 }
@@ -120,16 +102,24 @@ impl<const N: usize, const Q: usize> SimRunner<N, Q> {
         let mut count = 0;
 
         for envelope in &delivered {
+            // Counts frames put on the segment, not node deliveries: each frame
+            // below is offered to every node, so counting per node would inflate
+            // this by the node count and contradict what it documents.
+            count += 1;
+
             for node in nodes.iter_mut() {
-                if *node.address() == envelope.dst {
-                    let _ = node.handle(&envelope.src, &envelope.data, now);
-                    count += 1;
-                }
+                // Offered to every node on the segment, as a real CAN or Ethernet
+                // link does. Filtering by destination here made the harness do the
+                // nodes' job, so a node that cannot filter its own traffic looked
+                // correct in simulation and would answer everything in production.
+                let frame =
+                    InboundFrame::new(envelope.src.clone(), envelope.dst.clone(), &envelope.data);
+                node.handle(&frame, now);
             }
         }
 
         for node in nodes.iter_mut() {
-            let _ = node.tick(now);
+            node.tick(now);
         }
 
         let mut outbox = Vec::new();
