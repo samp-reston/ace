@@ -1,0 +1,55 @@
+include:
+  - component: $CI_SERVER_FQDN/rust-ci/rust-ci/base-pipeline@1.7.0
+    inputs:
+      target: lib
+      rust-image: rust:1.97.0
+      cargo-home: "$CI_PROJECT_DIR/.cargo-home"
+      stages-extra:
+        - ace-verify
+        - ace-release
+      test-args: "--workspace --no-fail-fast"
+      clippy-allow-failure: false
+
+default:
+  image: rust:1.97.0
+
+variables:
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo-home"
+  CARGO_TARGET_DIR: "$CI_PROJECT_DIR/target"
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "2"
+
+cache:
+  key: "$CI_JOB_NAME"
+  paths:
+    - .cargo-home/registry
+    - .cargo-home/git
+
+ace:matrix:
+  stage: ace-verify
+  before_script:
+    - rustup component add rustfmt
+    - rustup target add thumbv7em-none-eabihf
+    - cargo install cargo-hack --version 0.6.45 --locked --jobs 2
+  script:
+    - sh ci/verify-matrix.sh
+
+ace:msrv:
+  stage: ace-verify
+  before_script:
+    - rustup toolchain install 1.88.0 --profile minimal
+    - cargo install cargo-msrv --version 0.19.3 --locked --jobs 2
+  script:
+    - sh ci/verify-msrv.sh
+
+ace:semver:
+  stage: ace-release
+  before_script:
+    - cargo install cargo-semver-checks --version 0.47.0 --locked --jobs 2
+  rules:
+    # The development branch intentionally contains unreleased breaking changes.
+    # Run this against the published package baseline only when cutting a tag.
+    - if: '$CI_COMMIT_TAG'
+    - when: never
+  script:
+    - sh ci/verify-semver.sh
