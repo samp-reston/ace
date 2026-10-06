@@ -311,36 +311,22 @@ client.unsubscribe_periodic(0x90);
 
 ### `ace-sim`
 
-Deterministic simulation infrastructure. Everything needed to test protocol state machines reproducibly.
+Deterministic simulation infrastructure for reproducibly testing protocol state machines.
 
-**`SimBus<N, Q>`** - message delivery with fault injection. Seeded RNG makes every run reproducible. Configurable faults: message loss, reorder, delay, corruption, timeout.
+- **`SimBus<N, Q>`** - bounded seeded message delivery with probabilistic and scripted faults.
+- **`TcpSimBus`** - connection-oriented delivery with bounded per-pair connections and TCP faults.
+- **`CanSimBus`** - connectionless delivery with CAN state, arbitration, bit-error, and bus-off faults.
+- **`SimNodeErased<N, Q>`** - object-safe node surface for heterogeneous simulation participants.
+- **`SimRunner<N, Q>`** - drives heterogeneous nodes over a generic `SimBus`.
+- **`TwoTierRunner`** - composes an outer bus, inner bus, and role-based bridges without knowing
+  whether the transports are DoIP, CAN, or another layered protocol.
+- **`TraceBus` / `TraceReplay`** - capture bounded bus operations and replay their observable
+  outputs without consulting RNG or fault configuration.
+- **`FaultPlan`** - deterministic one-shot drop, delay, duplicate, and opaque byte-replacement
+  actions. Protocol-specific faulty peers remain a future testkit concern.
 
-**`TcpSimBus<N, Q>`** - wraps `SimBus` and adds TCP connection state. The bus owns connection state — nodes don't track it. TCP fault injection: connection refused, mid-session reset, connect timeout.
-
-**`CanSimBus<N, Q>`** - wraps `SimBus` and adds CAN bus state (Active / ErrorPassive / BusOff). CAN fault injection: arbitration loss, bit error, bus-off.
-
-**`SimNode<N, Q>`** - trait for nodes on the simulation buses:
-
-```rust
-pub trait SimNode<const N: usize, const Q: usize> {
-    type Error: core::fmt::Debug;
-    fn address(&self) -> &NodeAddress;
-    fn handle(&mut self, src: &NodeAddress, data: &[u8], now: Instant) -> Result<(), Self::Error>;
-    fn tick(&mut self, now: Instant) -> Result<(), Self::Error>;
-    fn drain_outbox(&mut self, out: &mut Vec<(NodeAddress, Vec<u8, N>), Q>) -> usize;
-}
-```
-
-**`SimNodeErased<N, Q>`** - object-safe version with errors swallowed internally, enabling heterogeneous slices of different node types.
-
-**`SimRunner<N, Q>`** - drives `SimNodeErased` slices over a `SimBus`.
-
-**`TcpSimRunner<N, Q>`** - drives nodes over a `TcpSimBus`, additionally delivering `TcpEvent`s to nodes implementing `TcpEventHandler`.
-
-**`CanSimRunner<N, Q>`** - drives nodes over a `CanSimBus`, additionally delivering `CanEvent`s to nodes implementing `CanEventHandler`.
-
-**`FaultConfig`** - three presets: `none()`, `light()`, `chaos()`. All probabilities are `(numerator, denominator)` pairs for reproducibility.
-
+All clocks are virtual and all buffers are bounded. The crate builds with `no_std`; `alloc` is an
+opt-in storage feature.
 ---
 
 ### `ace-gateway`
