@@ -20,15 +20,15 @@ tokio-util = { version = "0.7.18" }
 # need, and wire `derive_more/std` from their own `std` feature.
 derive_more = { version = "2.1.1", default-features = false }
 
-aced = { package = "ace-api", path = "crates/ace-api", version = "0.5.5" }
-ace-core = { path = "crates/ace-core", version = "0.5.5" }
-ace-macros = { path = "crates/ace-macros", version = "0.5.5" }
-ace-proto = { path = "crates/ace-proto", version = "0.5.5" }
-ace-can = { path = "crates/ace-can", version = "0.5.5" }
-ace-sim = { path = "crates/ace-sim", version = "0.5.5" }
-ace-uds = { path = "crates/ace-uds", version = "0.5.5" }
-ace-doip = { path = "crates/ace-doip", version = "0.5.5" }
-ace-server = { path = "crates/ace-server", version = "0.5.5" }
-ace-client = { path = "crates/ace-client", version = "0.5.5" }
-ace-gateway = { path = "crates/ace-gateway", version = "0.5.5" }
-ace-transport = { path = "crates/ace-transport", version = "0.5.5" }
+aced = { package = "ace-api", path = "crates/ace-api", version = "0.6.0" }
+ace-core = { path = "crates/ace-core", version = "0.6.0" }
+ace-macros = { path = "crates/ace-macros", version = "0.6.0" }
+ace-proto = { path = "crates/ace-proto", version = "0.6.0" }
+ace-can = { path = "crates/ace-can", version = "0.6.0" }
+ace-sim = { path = "crates/ace-sim", version = "0.6.0" }
+ace-uds = { path = "crates/ace-uds", version = "0.6.0" }
+ace-doip = { path = "crates/ace-doip", version = "0.6.0" }
+ace-server = { path = "crates/ace-server", version = "0.6.0" }
+ace-client = { path = "crates/ace-client", version = "0.6.0" }
+ace-gateway = { path = "crates/ace-gateway", version = "0.6.0" }
+ace-transport = { path = "crates/ace-transport", version = "0.6.0" }

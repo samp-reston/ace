@@ -16,7 +16,7 @@ crate and depend on the individual `ace-*` crates directly instead (see
 
 ```toml
 [dependencies]
-aced = "0.5.5"
+aced = "0.6.0"
 ```
 
 That's it - no `[features]` section required. `alloc` is on by default, so
@@ -55,7 +55,7 @@ targeting a constrained environment):
 
 ```toml
 [dependencies]
-aced = { version = "0.5.5", default-features = false }
+aced = { version = "0.6.0", default-features = false }
 ```
 
 ## Crates in this workspace
@@ -87,8 +87,8 @@ false`:
 
 ```toml
 [dependencies]
-ace-core = { version = "0.5.5", default-features = false }
-ace-uds  = { version = "0.5.5", default-features = false }
+ace-core = { version = "0.6.0", default-features = false }
+ace-uds  = { version = "0.6.0", default-features = false }
 ```
 
 In this mode, bounded collections are backed by `heapless::Vec`, with

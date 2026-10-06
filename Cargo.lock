@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ace-api"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-can",
  "ace-client",
@@ -20,7 +20,7 @@ dependencies = [
 
 [[package]]
 name = "ace-can"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "ace-proto",
@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "ace-client"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "ace-proto",
@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "ace-core"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "bytes",
  "heapless",
@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "ace-doip"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "ace-macros",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "ace-gateway"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-can",
  "ace-client",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "ace-macros"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "bytes",
@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "ace-proto"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "heapless",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "ace-server"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "ace-proto",
@@ -109,14 +109,14 @@ dependencies = [
 
 [[package]]
 name = "ace-sim"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
 ]
 
 [[package]]
 name = "ace-tests"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-can",
  "ace-client",
@@ -131,14 +131,14 @@ dependencies = [
 
 [[package]]
 name = "ace-transport"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-api",
 ]
 
 [[package]]
 name = "ace-uds"
-version = "0.5.5"
+version = "0.6.0"
 dependencies = [
  "ace-core",
  "ace-macros",
