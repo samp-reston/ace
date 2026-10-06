@@ -38,6 +38,12 @@ pub struct PendingRouteTable<const MAX_PENDING: usize> {
     entries: Vec<PendingRoute, MAX_PENDING>,
 }
 
+impl<const MAX_PENDING: usize> Default for PendingRouteTable<MAX_PENDING> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const MAX_PENDING: usize> PendingRouteTable<MAX_PENDING> {
     pub fn new() -> Self {
         Self {

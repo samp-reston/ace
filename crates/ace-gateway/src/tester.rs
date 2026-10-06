@@ -237,7 +237,7 @@ impl<
 
         Self {
             address,
-            client: UdsClient::new(config),
+            client: UdsClient::new(config, NodeAddress(tester_address as u32)),
             p2: default_p2,
             p2_star: default_p2_star,
             timing_tolerance,
@@ -640,7 +640,7 @@ impl<
         now: Instant,
     ) -> Result<(), DoipTesterError> {
         let source = u16::from_be_bytes([
-            payload_data.get(0).copied().unwrap_or(0),
+            payload_data.first().copied().unwrap_or(0),
             payload_data.get(1).copied().unwrap_or(0),
         ]);
         let uds_data = payload_data.get(4..).unwrap_or(&[]);
@@ -652,7 +652,7 @@ impl<
         self.ensure_target(source)?;
 
         let conn_id = self.connection_id();
-        let target_id = TargetId(u16::from(source));
+        let target_id = TargetId(source);
         let tester_address = self.tester_address;
 
         if let Some(target) = self.find_target_mut(source) {
@@ -692,7 +692,7 @@ impl<
 
     fn on_diagnostic_nack(&mut self, payload_data: &[u8]) -> Result<(), DoipTesterError> {
         let source = u16::from_be_bytes([
-            payload_data.get(0).copied().unwrap_or(0),
+            payload_data.first().copied().unwrap_or(0),
             payload_data.get(1).copied().unwrap_or(0),
         ]);
         let mut buf: Vec<u8, MAX_DATA> = Vec::new();
@@ -1100,11 +1100,11 @@ impl<
         let gateway_address = inbound.src.0 as u16;
 
         let frame = DoipFrame::from_slice(data);
-        if frame.validate_header().is_ok() {
-            if let Some(Ok(payload_type)) = frame.payload_type() {
-                let payload_data = frame.payload_bytes().unwrap_or(&[]);
-                self.handle_profile_frame(gateway_address, payload_type, payload_data);
-            }
+        if frame.validate_header().is_ok()
+            && let Some(Ok(payload_type)) = frame.payload_type()
+        {
+            let payload_data = frame.payload_bytes().unwrap_or(&[]);
+            self.handle_profile_frame(gateway_address, payload_type, payload_data);
         }
 
         if let Some(conn) = self.find_conn_by_gateway_mut(gateway_address) {

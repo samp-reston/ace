@@ -253,17 +253,16 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> CanSimBus<MAX_DATA, MAX_QUE
 
     /// Advances simulation time, delivers due frames, and checks bus-off fault injection.
     pub fn tick(&mut self, duration: Duration) -> Vec<Envelope<MAX_DATA>, MAX_QUEUED> {
-        if self.bus_state.is_operational() {
-            if self
+        if self.bus_state.is_operational()
+            && self
                 .rng
                 .chance(self.can_faults.bus_off.0, self.can_faults.bus_off.1)
-            {
-                let now = self.inner.now();
+        {
+            let now = self.inner.now();
 
-                self.bus_state = CanBusState::BusOff { since: now };
+            self.bus_state = CanBusState::BusOff { since: now };
 
-                self.emit(CanEvent::BusOff);
-            }
+            self.emit(CanEvent::BusOff);
         }
 
         if !self.bus_state.is_operational() {

@@ -234,12 +234,9 @@ impl DoipVehicleDriver {
 
         self.tcp_writers.push((conn_id, write_tx));
 
-        self.tester.open_connection(config).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "DoipTester: too many connections",
-            )
-        })?;
+        self.tester
+            .open_connection(config)
+            .map_err(|_| std::io::Error::other("DoipTester: too many connections"))?;
 
         let now = aced::sim::clock::Instant::from_micros(
             SystemTime::now()
@@ -460,15 +457,10 @@ fn udp_listener_thread(tx: Sender<Vec<u8>>, udp_port: u16) {
     };
 
     let mut buf = vec![0u8; 4096];
-    loop {
-        match socket.recv_from(&mut buf) {
-            Ok((len, _src)) => {
-                let frame = buf[..len].to_vec();
-                if tx.send(frame).is_err() {
-                    break;
-                }
-            }
-            Err(_) => break,
+    while let Ok((len, _src)) = socket.recv_from(&mut buf) {
+        let frame = buf[..len].to_vec();
+        if tx.send(frame).is_err() {
+            break;
         }
     }
 }

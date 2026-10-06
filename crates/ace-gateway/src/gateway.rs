@@ -301,7 +301,7 @@ where
         let data = inbound.data;
         let frame = DoipFrame::from_slice(data);
 
-        if let Err(_) = frame.validate_header() {
+        if frame.validate_header().is_err() {
             self.send_generic_nack(src)?;
             return Err(GatewayError::InvalidDoipHeader);
         }
@@ -421,19 +421,19 @@ where
                 .map_err(GatewayError::IsoTpError)?
             {
                 ReassembleResult::Complete { len } => {
-                    if let Some(uds_bytes) = isotp.resp_reassembler.message(len) {
-                        if let Some(route) = self.routes.take_by_can_response_id(response_can_id) {
-                            let mut buf: Vec<u8, UDS_MAX_FRAME> = Vec::new();
-                            buf.extend_from_slice(&uds_bytes[..len])
-                                .map_err(|_| GatewayError::FrameTooLong)?;
+                    if let Some(uds_bytes) = isotp.resp_reassembler.message(len)
+                        && let Some(route) = self.routes.take_by_can_response_id(response_can_id)
+                    {
+                        let mut buf: Vec<u8, UDS_MAX_FRAME> = Vec::new();
+                        buf.extend_from_slice(&uds_bytes[..len])
+                            .map_err(|_| GatewayError::FrameTooLong)?;
 
-                            pending = Some((
-                                NodeAddress(route.tester_address as u32),
-                                route.doip_target,
-                                route.doip_source,
-                                buf,
-                            ));
-                        }
+                        pending = Some((
+                            NodeAddress(route.tester_address as u32),
+                            route.doip_target,
+                            route.doip_source,
+                            buf,
+                        ));
                     }
                 }
                 ReassembleResult::FlowControl { frame, len: fc_len } => {

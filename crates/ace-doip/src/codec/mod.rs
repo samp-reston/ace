@@ -1,5 +1,6 @@
 // region: Modules
 
+#[cfg(feature = "tokio")]
 pub mod tokio_codec;
 
 // endregion: Modules

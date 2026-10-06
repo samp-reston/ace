@@ -172,7 +172,7 @@ impl ace_core::codec::FrameWrite for ResponseOnEventRequest<'_> {
         };
 
         buf.write_bytes(&[storage_bit | event_bits])
-            .map_err(|e| UdsError::from(e))?;
+            .map_err(UdsError::from)?;
 
         match &self.event_type {
             EventType::StopResponseOnEvent(inner) => inner.encode(buf)?,

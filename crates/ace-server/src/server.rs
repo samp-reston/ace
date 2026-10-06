@@ -623,12 +623,12 @@ where
             .current_session()
             .map(|s| s.s3_timeout)
             .unwrap_or(Duration::from_millis(DEFAULT_S3));
-        if let Some(elapsed) = now.checked_duration_since(self.session.last_rx) {
-            if elapsed > s3 {
-                self.session.session_type = 0x01;
-                self.session.security_level = 0;
-                self.security.clear_pending();
-            }
+        if let Some(elapsed) = now.checked_duration_since(self.session.last_rx)
+            && elapsed > s3
+        {
+            self.session.session_type = 0x01;
+            self.session.security_level = 0;
+            self.security.clear_pending();
         }
     }
 
@@ -1051,11 +1051,10 @@ where
                 .config
                 .find_security_level(level)
                 .map(|l| l.seed_length)
+                && seed_len != expected
             {
-                if seed_len != expected {
-                    self.security.clear_pending();
-                    return self.nrc(src, 0x27, H::Error::conditions_not_correct(), now);
-                }
+                self.security.clear_pending();
+                return self.nrc(src, 0x27, H::Error::conditions_not_correct(), now);
             }
 
             self.security.pending_seed.clear();
@@ -1105,15 +1104,15 @@ where
                 .map(|l| l.lockout_duration)
                 .unwrap_or(Duration::from_millis(DEFAULT_LOCKOUT));
 
-            if let Some(expected) = level_cfg.map(|l| l.key_length) {
-                if key.len() != expected {
-                    return self.nrc(
-                        src,
-                        0x27,
-                        H::Error::incorrect_message_length_or_invalid_format(),
-                        now,
-                    );
-                }
+            if let Some(expected) = level_cfg.map(|l| l.key_length)
+                && key.len() != expected
+            {
+                return self.nrc(
+                    src,
+                    0x27,
+                    H::Error::incorrect_message_length_or_invalid_format(),
+                    now,
+                );
             }
 
             let seed = self.security.pending_seed.clone();
@@ -1167,7 +1166,7 @@ where
     ) -> Result<(), ServerError<H::Error>> {
         // Payload is pairs of DID bytes: [DID_high, DID_low, DID_high, DID_low, ...]
         let payload = frame.payload();
-        if payload.len() < 2 || payload.len() % 2 != 0 {
+        if payload.len() < 2 || !payload.len().is_multiple_of(2) {
             return self.nrc(
                 src,
                 0x22,
@@ -1278,7 +1277,7 @@ where
                 }
                 self.pos(src, 0x2A, &[mode], now)
             }
-            0x01 | 0x02 | 0x03 => {
+            0x01..=0x03 => {
                 let requested_interval = match mode {
                     0x01 => periodic::SLOW,
                     0x02 => periodic::MEDIUM,

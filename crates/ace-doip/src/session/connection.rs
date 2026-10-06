@@ -267,7 +267,7 @@ impl<
 
     fn on_diagnostic_message(&mut self, payload_data: &[u8]) -> Result<(), DoipError> {
         let source = u16::from_be_bytes([
-            payload_data.get(0).copied().unwrap_or(0),
+            payload_data.first().copied().unwrap_or(0),
             payload_data.get(1).copied().unwrap_or(0),
         ]);
         let target = u16::from_be_bytes([

@@ -106,7 +106,8 @@ const CHAOS_MAX_TICKS: usize = 2_000;
 
 #[test]
 fn p1_routing_activation_succeeds_no_faults() {
-    for seed in [0] {
+    {
+        let seed = 0;
         let mut s = MyDoipDstScenario::baseline(seed);
         s.connect();
         s.tick_n(50);
@@ -404,7 +405,7 @@ fn p3_rdbi_vin_over_doip_no_faults() {
     let data = rdbi_resp.unwrap();
     let vin = data.get(2..).unwrap_or(&[]);
 
-    assert_eq!(data.get(0).copied(), Some(0xF1));
+    assert_eq!(data.first().copied(), Some(0xF1));
     assert_eq!(data.get(1).copied(), Some(0x90));
     assert_eq!(vin, b"TESTVIN1234567890");
 }

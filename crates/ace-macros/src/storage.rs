@@ -206,24 +206,23 @@ pub fn derive_if_needed(input: DeriveInput) -> TokenStream {
 }
 
 fn extract_iter_inner(ty: &syn::Type) -> TokenStream {
-    if let syn::Type::Path(tp) = ty {
-        if let Some(seg) = tp.path.segments.last() {
-            if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
-                let inner = args
-                    .args
-                    .iter()
-                    .filter_map(|a| {
-                        if let syn::GenericArgument::Type(t) = a {
-                            Some(quote! { #t })
-                        } else {
-                            None
-                        }
-                    })
-                    .last();
-                if let Some(t) = inner {
-                    return t;
+    if let syn::Type::Path(tp) = ty
+        && let Some(seg) = tp.path.segments.last()
+        && let syn::PathArguments::AngleBracketed(args) = &seg.arguments
+    {
+        let inner = args
+            .args
+            .iter()
+            .filter_map(|a| {
+                if let syn::GenericArgument::Type(t) = a {
+                    Some(quote! { #t })
+                } else {
+                    None
                 }
-            }
+            })
+            .next_back();
+        if let Some(t) = inner {
+            return t;
         }
     }
     compile_error(

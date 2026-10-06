@@ -160,10 +160,10 @@ impl<const MAX_DATA: usize, const MAX_QUEUED: usize> SimBus<MAX_DATA, MAX_QUEUED
             }
         }
 
-        if let Some((offset, value)) = replacement {
-            if let Some(byte) = payload.get_mut(offset) {
-                *byte = value;
-            }
+        if let Some((offset, value)) = replacement
+            && let Some(byte) = payload.get_mut(offset)
+        {
+            *byte = value;
         }
 
         let deliver_at = if self

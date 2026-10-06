@@ -73,11 +73,10 @@ fn main() -> std::io::Result<()> {
                     ref data,
                 }) => {
                     println!("Extended session active (P2={}ms)", {
-                        let p2_ms = u16::from_be_bytes([
+                        u16::from_be_bytes([
                             data.get(1).copied().unwrap_or(0),
                             data.get(2).copied().unwrap_or(0),
-                        ]);
-                        p2_ms
+                        ])
                     });
 
                     if !vin_sent {

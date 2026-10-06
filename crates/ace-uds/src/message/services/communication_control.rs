@@ -161,7 +161,7 @@ impl ace_core::codec::FrameWrite for CommunicationType {
         };
 
         let byte = communication_type_bits | (reserved_bits << 2) | (subnet_bits << 4);
-        buf.write_bytes(&[byte]).map_err(|e| UdsError::from(e))
+        buf.write_bytes(&[byte]).map_err(UdsError::from)
     }
 }
 

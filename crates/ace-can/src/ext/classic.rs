@@ -11,16 +11,16 @@ use ace_proto::can::frame::classic::{CanFrame, CanFrameMut};
 
 // region: Offsets
 
-/// Byte layout of a raw classic CAN frame:
-///
-/// [0..=3] - 32-bit CAN ID word (big-endian)
-///           bit 31: extended frame flag (EFF)
-///           bit 30: remote transmission request (RTR)
-///           bit 29: error frame flag (ERR)
-///           bits 28-0: CAN ID (11-bit in bits 10-0 for standard,
-///                               29-bit in bits 28-0 for extended)
-/// [4]     - DLC (0–8)
-/// [5..=12]- data bytes (0–8 bytes, DLC determines count)
+// Byte layout of a raw classic CAN frame:
+//
+// [0..=3] - 32-bit CAN ID word (big-endian)
+//           bit 31: extended frame flag (EFF)
+//           bit 30: remote transmission request (RTR)
+//           bit 29: error frame flag (ERR)
+//           bits 28-0: CAN ID (11-bit in bits 10-0 for standard,
+//                               29-bit in bits 28-0 for extended)
+// [4]     - DLC (0–8)
+// [5..=12]- data bytes (0–8 bytes, DLC determines count)
 
 // endregion: Offsets
 
@@ -58,15 +58,15 @@ pub trait CanFrameExt {
     // region: Flags
 
     fn is_extended_frame(&self) -> bool {
-        self.id_word().map_or(false, |w| w & EFF_FLAG != 0)
+        self.id_word().is_some_and(|w| w & EFF_FLAG != 0)
     }
 
     fn is_rtr(&self) -> bool {
-        self.id_word().map_or(false, |w| w & RTR_FLAG != 0)
+        self.id_word().is_some_and(|w| w & RTR_FLAG != 0)
     }
 
     fn is_error_frame(&self) -> bool {
-        self.id_word().map_or(false, |w| w & ERR_FLAG != 0)
+        self.id_word().is_some_and(|w| w & ERR_FLAG != 0)
     }
 
     // endregion: Flags

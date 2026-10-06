@@ -21,7 +21,7 @@ fn p1_rdbi_vin_default_session() {
 
         let data = expect_positive(&mut s.client, 0x22);
         // Response: [DID_high, DID_low, data...]
-        assert_eq!(data.get(0).copied(), Some(0xF1), "seed {seed}");
+        assert_eq!(data.first().copied(), Some(0xF1), "seed {seed}");
         assert_eq!(data.get(1).copied(), Some(0x90), "seed {seed}");
         // VIN from fixture: "TESTVIN1234567890"
         let vin = data.get(2..).unwrap_or(&[]);

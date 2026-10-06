@@ -68,6 +68,12 @@ impl DoipAddress {
     }
 }
 
+impl ace_core::DiagnosticAddress for DoipAddress {
+    fn address_mode(&self) -> ace_core::AddressMode {
+        self.mode.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,11 +103,5 @@ mod tests {
     fn classify_derives_the_mode_from_the_value() {
         assert_eq!(DoipAddress::classify(0x1726).mode, AddressMode::Physical);
         assert_eq!(DoipAddress::classify(0xE400).mode, AddressMode::Functional);
-    }
-}
-
-impl ace_core::DiagnosticAddress for DoipAddress {
-    fn address_mode(&self) -> ace_core::AddressMode {
-        self.mode.clone()
     }
 }

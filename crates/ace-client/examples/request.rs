@@ -6,7 +6,7 @@ use ace_core::io::NodeAddress;
 
 fn main() {
     let config = ClientConfig::new(0x0E00, 0x0001);
-    let mut client: UdsClient<1, 32, 4, 4, 2, 64> = UdsClient::new(config);
+    let mut client: UdsClient<1, 32, 4, 4, 2, 64> = UdsClient::new(config, NodeAddress(0x0E00));
 
     client
         .request(&[0x10, 0x03], Instant::ZERO)

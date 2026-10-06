@@ -114,12 +114,12 @@ impl<const N: usize, const Q: usize> SimRunner<N, Q> {
                 // correct in simulation and would answer everything in production.
                 let frame =
                     InboundFrame::new(envelope.src.clone(), envelope.dst.clone(), &envelope.data);
-                let _ = node.handle(&frame, now);
+                node.handle(&frame, now);
             }
         }
 
         for node in nodes.iter_mut() {
-            let _ = node.tick(now);
+            node.tick(now);
         }
 
         let mut outbox = Vec::new();

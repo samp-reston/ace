@@ -590,7 +590,7 @@ impl ace_core::codec::FrameWrite for DtcStatusMask {
             | ((self.test_not_completed_this_operation_cycle as u8) << 6)
             | ((self.warning_indicator_requested as u8) << 7);
 
-        buf.write_bytes(&[byte]).map_err(|e| UdsError::from(e))
+        buf.write_bytes(&[byte]).map_err(UdsError::from)
     }
 }
 

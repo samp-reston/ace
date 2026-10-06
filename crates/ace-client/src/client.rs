@@ -48,12 +48,16 @@ impl<
     const MAX_DATA: usize,
 > UdsClient<PENDING, SIM_MAX_FRAME, SIM_MAX_OUTBOX, MAX_EVENTS, PERIODIC_DIDS, MAX_DATA>
 {
-    pub fn new(config: ClientConfig) -> Self {
-        let address = NodeAddress(u32::from(config.physical_address));
+    pub fn new(config: ClientConfig, address: NodeAddress) -> Self {
+        let configured_address = NodeAddress(u32::from(config.physical_address));
+        debug_assert_eq!(
+            address, configured_address,
+            "UdsClient address must match ClientConfig::physical_address"
+        );
         let server = NodeAddress(config.target_address as u32);
         Self {
             config,
-            address,
+            address: configured_address,
             server,
             pending: Vec::new(),
             outbox: Vec::new(),

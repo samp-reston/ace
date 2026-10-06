@@ -39,25 +39,21 @@ impl<'a> ace_core::codec::FrameRead<'a> for ScalingByte<'a> {
 
         let extension = match &high_nibble {
             ScalingByteHighNibble::BitMappedReportedWithoutMask => {
-                let mut ext_buf =
-                    ace_core::codec::take_n(buf, length).map_err(|e| UdsError::from(e))?;
+                let mut ext_buf = ace_core::codec::take_n(buf, length).map_err(UdsError::from)?;
                 ScalingByteExtension::BitMappedReportedWithoutMask(
                     BitMappedReportedWithoutMask::decode(&mut ext_buf)?,
                 )
             }
             ScalingByteHighNibble::Formula => {
-                let mut ext_buf =
-                    ace_core::codec::take_n(buf, length).map_err(|e| UdsError::from(e))?;
+                let mut ext_buf = ace_core::codec::take_n(buf, length).map_err(UdsError::from)?;
                 ScalingByteExtension::Formula(Formula::decode(&mut ext_buf)?)
             }
             ScalingByteHighNibble::UnitFormat => {
-                let mut ext_buf =
-                    ace_core::codec::take_n(buf, length).map_err(|e| UdsError::from(e))?;
+                let mut ext_buf = ace_core::codec::take_n(buf, length).map_err(UdsError::from)?;
                 ScalingByteExtension::UnitFormat(UnitFormat::decode(&mut ext_buf)?)
             }
             ScalingByteHighNibble::StateAndConnectionType => {
-                let mut ext_buf =
-                    ace_core::codec::take_n(buf, length).map_err(|e| UdsError::from(e))?;
+                let mut ext_buf = ace_core::codec::take_n(buf, length).map_err(UdsError::from)?;
                 ScalingByteExtension::StateAndConnectionType(StateAndConnectionType::decode(
                     &mut ext_buf,
                 )?)
@@ -97,7 +93,7 @@ impl ace_core::codec::FrameWrite for ScalingByte<'_> {
         };
 
         buf.write_bytes(&[(high << 4) | low])
-            .map_err(|e| UdsError::from(e))?;
+            .map_err(UdsError::from)?;
 
         match &self.extension {
             ScalingByteExtension::BitMappedReportedWithoutMask(inner) => inner.encode(buf)?,
@@ -190,10 +186,8 @@ impl<'a> ace_core::codec::FrameRead<'a> for BitMappedReportedWithoutMask<'a> {
 impl ace_core::codec::FrameWrite for BitMappedReportedWithoutMask<'_> {
     type Error = UdsError;
     fn encode<W: ace_core::codec::Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
-        buf.write_bytes(&[self.mask_byte])
-            .map_err(|e| UdsError::from(e))?;
-        buf.write_bytes(self.remaining)
-            .map_err(|e| UdsError::from(e))
+        buf.write_bytes(&[self.mask_byte]).map_err(UdsError::from)?;
+        buf.write_bytes(self.remaining).map_err(UdsError::from)
     }
 }
 
@@ -513,7 +507,7 @@ impl ace_core::codec::FrameWrite for StateAndConnectionType {
         let byte =
             activity_bits | (signal_bits << 3) | (input_signal_bit << 5) | (resistor_bits << 6);
 
-        buf.write_bytes(&[byte]).map_err(|e| UdsError::from(e))
+        buf.write_bytes(&[byte]).map_err(UdsError::from)
     }
 }
 

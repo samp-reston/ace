@@ -5,7 +5,6 @@
 ///
 /// The server state machine uses this to construct NRC responses without knowing the application's
 /// error type internals. The application defines the mapping via `Into<u8>`.
-
 pub trait NrcError: Into<u8> + core::fmt::Debug {
     // region: Mandatory constructors - one per NRC the server may emit
 

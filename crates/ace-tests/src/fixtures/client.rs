@@ -12,5 +12,5 @@ pub fn default_client(address: NodeAddress, target: NodeAddress) -> DstScenarioU
         .with_p2_timeout(Duration::from_millis(200))
         .with_p2_extended_timeout(Duration::from_millis(6_000));
 
-    UdsClient::new(config)
+    UdsClient::new(config, address)
 }

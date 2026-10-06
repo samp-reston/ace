@@ -19,13 +19,13 @@ use ace_core::{clock::Instant, io::NodeAddress};
 
 // region: Capacity Constants
 
-/// Max reassembled UDS message size.
+// Max reassembled UDS message size.
 // pub const ISOTP_MAX_UDS: usize = 4096;
 
-/// Max CAN frame payload bytes (classic CAN = 8, CAN FD = 64).
+// Max CAN frame payload bytes (classic CAN = 8, CAN FD = 64).
 // pub const ISOTP_MAX_FRAME: usize = 64;
 
-/// Max outbox depth.
+// Max outbox depth.
 // pub const ISOTP_MAX_OUT: usize = 64;
 
 // endregion: Capacity Constants
