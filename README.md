@@ -85,7 +85,7 @@ Concrete implementations of those live with their consumer: `ace-sim` supplies a
 virtual clock and seeded RNG, an embedded integrator supplies a hardware timer and
 entropy source. Nothing in a production build depends on `ace-sim`.
 
-Also provides `DiagError`, `AddressMode`, `DiagnosticAddress`, and the
+Also provides `CodecError`, `AddressMode`, `DiagnosticAddress`, and the
 `FrameIter<'a, T>` lazy iterator for variable-length repeated fields.
 
 ```toml

@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - "phase/**"
     tags:
       - "v*"
   pull_request:

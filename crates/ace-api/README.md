@@ -1,6 +1,9 @@
-# aced
+# ace-api
 
 **Batteries-included entry point for the ACE diagnostics stack.**
+
+> Published on crates.io as **`ace-api`**; imported in code as **`aced`** (the
+> library name). Depend on `ace-api` in `Cargo.toml`, then `use aced::…`.
 
 `aced` re-exports the full `ace-*` crate family - core codec traits, UDS, DoIP,
 CAN/ISO-TP, simulation, client, server, and gateway - behind a single
@@ -16,7 +19,7 @@ crate and depend on the individual `ace-*` crates directly instead (see
 
 ```toml
 [dependencies]
-aced = "0.6.0"
+ace-api = "0.6.0"
 ```
 
 That's it - no `[features]` section required. `alloc` is on by default, so
@@ -55,7 +58,7 @@ targeting a constrained environment):
 
 ```toml
 [dependencies]
-aced = { version = "0.6.0", default-features = false }
+ace-api = { version = "0.6.0", default-features = false }
 ```
 
 ## Crates in this workspace
