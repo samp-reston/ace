@@ -122,7 +122,7 @@ fn server(response_len: usize) -> TestServer {
 /// A physically addressed request from the tester to this server.
 ///
 /// These tests are about capacity, not addressing, so every request is physical - the
-/// functional path and its suppression rules are ADR-005's subject.
+/// functional path and its suppression rules are covered in functional_addressing_test.
 fn physical(data: &[u8]) -> InboundFrame<'_> {
     InboundFrame::new(NodeAddress(0x0E80), NodeAddress(0x1000), data)
 }

@@ -5,7 +5,7 @@
 //! pending state, no P2* deadline, and no way for a handler to say "accepted, not finished".
 //! The client already handled receiving it.
 //!
-//! The governing clause, from ISO 14229-1:2026 and recorded in ADR-005:
+//! The governing clause, from ISO 14229-1:2026:
 //!
 //! > When this NRC is used, the server shall always send a final response independent of the
 //! > suppressPosRspMsgIndicationBit value or the suppress requirement for responses with NRCs

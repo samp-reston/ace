@@ -5,7 +5,7 @@ each bound means, what happens when one is reached, and how to size them.
 
 It exists because "bounded memory with explicit errors" is the suite's central claim,
 and before Phase 3 that claim was not true in the configuration most consumers build
-in. See `ADR-004` for the error taxonomy this builds on.
+in.
 
 ## `N` means two different things
 

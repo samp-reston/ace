@@ -1,6 +1,6 @@
 //! Functional addressing and negative-response suppression.
 //!
-//! Enforces ISO 14229-1:2026 as recorded in ADR-005. The clause:
+//! Enforces ISO 14229-1:2026. The clause:
 //!
 //! > As required by the tables in the following subclauses, negative response messages
 //! > with negative response codes of serviceNotSupported,

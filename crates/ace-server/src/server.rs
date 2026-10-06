@@ -816,7 +816,7 @@ where
     /// subFunctionNotSupportedInActiveSession, serviceNotSupportedInActiveSession.
     ///
     /// Every one means "this server does not implement that". On a broadcast most
-    /// servers legitimately do not, so answering would flood the client. See ADR-005.
+    /// servers legitimately do not, so answering would flood the client.
     const FUNCTIONALLY_SUPPRESSED: [u8; 5] = [0x11, 0x12, 0x31, 0x7E, 0x7F];
 
     fn nrc_raw(
@@ -1306,7 +1306,7 @@ where
                     // is the opposite of "not implemented": the DID *is* supported and
                     // the server ran out of room. ISO 14229-1 requires that outcome to
                     // be reported even on a broadcast, so it must bypass the
-                    // suppression - see ADR-005.
+                    // suppression.
                     if self
                         .periodic
                         .register(did, effective, src.clone(), now)
