@@ -53,7 +53,7 @@ impl ace_core::codec::FrameWrite for DtcGroup {
             DtcGroup::FunctionalGroup(fg) => {
                 let mut tmp = [0u8; 1];
                 fg.encode(&mut tmp.as_mut_slice())?;
-                [0x00, 0xFF, tmp[0]]
+                [0xFF, 0xFF, tmp[0]]
             }
             DtcGroup::All => [0xFF, 0xFF, 0xFF],
         };
