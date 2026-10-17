@@ -18,48 +18,48 @@ pub enum ReadDtcInformationRequest {
     #[frame(id = 0x05)]
     ReportDtcStoredDataByRecordNumberRequest(ReportDtcStoredDataByRecordNumberRequest),
     #[frame(id = 0x06)]
-    ReportDTCExtDataRecordByDTCNumberRequest(ReportDTCExtDataRecordByDTCNumberRequest),
+    ReportDtcExtDataRecordByDtcNumberRequest(ReportDtcExtDataRecordByDtcNumberRequest),
     #[frame(id = 0x07)]
-    ReportNumberOfDTCBySeverityMaskRecordRequest(ReportNumberOfDTCBySeverityMaskRecordRequest),
+    ReportNumberOfDtcBySeverityMaskRecordRequest(ReportNumberOfDtcBySeverityMaskRecordRequest),
     #[frame(id = 0x08)]
-    ReportDTCSeverityInformationRequest(ReportDTCSeverityInformationRequest),
+    ReportDtcSeverityInformationRequest(ReportDtcSeverityInformationRequest),
     #[frame(id = 0x09)]
-    ReportSeverityInformationOfDTCRequest(ReportSeverityInformationOfDTCRequest),
+    ReportSeverityInformationOfDtcRequest(ReportSeverityInformationOfDtcRequest),
     #[frame(id = 0x0A)]
-    ReportSupportedDTCRequest(ReportSupportedDTCRequest),
+    ReportSupportedDtcRequest(ReportSupportedDtcRequest),
     #[frame(id = 0x0B)]
-    ReportFirstTestFailedDTCRequest(ReportFirstTestFailedDTCRequest),
+    ReportFirstTestFailedDtcRequest(ReportFirstTestFailedDtcRequest),
     #[frame(id = 0x0C)]
-    ReportFirstConfirmedDTCRequest(ReportFirstConfirmedDTCRequest),
+    ReportFirstConfirmedDtcRequest(ReportFirstConfirmedDtcRequest),
     #[frame(id = 0x0D)]
-    ReportMostRecentTestFailedDTCRequest(ReportMostRecentTestFailedDTCRequest),
+    ReportMostRecentTestFailedDtcRequest(ReportMostRecentTestFailedDtcRequest),
     #[frame(id = 0x0E)]
-    ReportMostRecentConfirmedDTCRequest(ReportMostRecentConfirmedDTCRequest),
+    ReportMostRecentConfirmedDtcRequest(ReportMostRecentConfirmedDtcRequest),
     #[frame(id = 0x14)]
-    ReportDTCFaultDetectionCounterRequest(ReportDTCFaultDetectionCounterRequest),
+    ReportDtcFaultDetectionCounterRequest(ReportDtcFaultDetectionCounterRequest),
     #[frame(id = 0x15)]
-    ReportDTCWithPermanentStatusRequest(ReportDTCWithPermanentStatusRequest),
+    ReportDtcWithPermanentStatusRequest(ReportDtcWithPermanentStatusRequest),
     #[frame(id = 0x16)]
-    ReportDTCExtDataRecordByRecordNumberRequest(ReportDTCExtDataRecordByRecordNumberRequest),
+    ReportDtcExtDataRecordByRecordNumberRequest(ReportDtcExtDataRecordByRecordNumberRequest),
     #[frame(id = 0x17)]
-    ReportUserDefMemoryDTCByStatusMaskRequest(ReportUserDefMemoryDTCByStatusMaskRequest),
+    ReportUserDefMemoryDtcByStatusMaskRequest(ReportUserDefMemoryDtcByStatusMaskRequest),
     #[frame(id = 0x18)]
-    ReportUserDefMemoryDTCSnapshotRecordByDTCNumberRequest(
-        ReportUserDefMemoryDTCSnapshotRecordByDTCNumberRequest,
+    ReportUserDefMemoryDtcSnapshotRecordByDtcNumberRequest(
+        ReportUserDefMemoryDtcSnapshotRecordByDtcNumberRequest,
     ),
     #[frame(id = 0x19)]
-    ReportUserDefMemoryDTCExtDataRecordByDTCNumberRequest(
-        ReportUserDefMemoryDTCExtDataRecordByDTCNumberRequest,
+    ReportUserDefMemoryDtcExtDataRecordByDtcNumberRequest(
+        ReportUserDefMemoryDtcExtDataRecordByDtcNumberRequest,
     ),
     #[frame(id = 0x1A)]
-    ReportSupportedDTCExtDataRecordRequest(ReportSupportedDTCExtDataRecordRequest),
+    ReportSupportedDtcExtDataRecordRequest(ReportSupportedDtcExtDataRecordRequest),
     #[frame(id = 0x42)]
-    ReportWWHOBDDTCByMaskRecordRequest(ReportWWHOBDDTCByMaskRecordRequest),
+    ReportWwhObdDtcByMaskRecordRequest(ReportWwhObdDtcByMaskRecordRequest),
     #[frame(id = 0x55)]
-    ReportWWHOBDDTCWithPermanentStatusRequest(ReportWWHOBDDTCWithPermanentStatusRequest),
+    ReportWwhObdDtcWithPermanentStatusRequest(ReportWwhObdDtcWithPermanentStatusRequest),
     #[frame(id = 0x56)]
-    ReportDTCInformationByDTCReadinessGroupIdentifierRequest(
-        ReportDTCInformationByDTCReadinessGroupIdentifierRequest,
+    ReportDtcInformationByDtcReadinessGroupIdentifierRequest(
+        ReportDtcInformationByDtcReadinessGroupIdentifierRequest,
     ),
 }
 
@@ -106,73 +106,73 @@ pub struct ReportDtcStoredDataByRecordNumberRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCExtDataRecordByDTCNumberRequest {
+pub struct ReportDtcExtDataRecordByDtcNumberRequest {
     pub dtc_mask_record: [u8; 3],
     pub dtc_ext_data_record_number: DtcExtendedDataRecordNumber,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportNumberOfDTCBySeverityMaskRecordRequest {
-    pub dtc_severity_mask_record: [u8; 2],
+pub struct ReportNumberOfDtcBySeverityMaskRecordRequest {
+    pub dtc_severity_mask_record: DtcSeverityMaskRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCSeverityInformationRequest {
-    pub dtc_severity_mask_record: [u8; 2],
+pub struct ReportDtcSeverityInformationRequest {
+    pub dtc_severity_mask_record: DtcSeverityMaskRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportSeverityInformationOfDTCRequest {
+pub struct ReportSeverityInformationOfDtcRequest {
     pub dtc_mask_record: [u8; 3],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportSupportedDTCRequest {}
+pub struct ReportSupportedDtcRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportFirstTestFailedDTCRequest {}
+pub struct ReportFirstTestFailedDtcRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportFirstConfirmedDTCRequest {}
+pub struct ReportFirstConfirmedDtcRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportMostRecentTestFailedDTCRequest {}
+pub struct ReportMostRecentTestFailedDtcRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportMostRecentConfirmedDTCRequest {}
+pub struct ReportMostRecentConfirmedDtcRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCFaultDetectionCounterRequest {}
+pub struct ReportDtcFaultDetectionCounterRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCWithPermanentStatusRequest {}
+pub struct ReportDtcWithPermanentStatusRequest {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCExtDataRecordByRecordNumberRequest {
+pub struct ReportDtcExtDataRecordByRecordNumberRequest {
     pub dtc_ext_data_record_number: DtcExtendedDataRecordNumber,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportUserDefMemoryDTCByStatusMaskRequest {
+pub struct ReportUserDefMemoryDtcByStatusMaskRequest {
     pub dtc_status_mask: DtcStatusMask,
     pub memory_selection: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportUserDefMemoryDTCSnapshotRecordByDTCNumberRequest {
+pub struct ReportUserDefMemoryDtcSnapshotRecordByDtcNumberRequest {
     pub dtc_mask_record: [u8; 3],
     pub user_def_dtc_snapshot_record_number: DtcSnapshotRecordNumber,
     pub memory_selection: u8,
@@ -180,7 +180,7 @@ pub struct ReportUserDefMemoryDTCSnapshotRecordByDTCNumberRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportUserDefMemoryDTCExtDataRecordByDTCNumberRequest {
+pub struct ReportUserDefMemoryDtcExtDataRecordByDtcNumberRequest {
     pub dtc_mask_record: [u8; 3],
     pub user_def_dtc_ext_data_record_number: DtcExtendedDataRecordNumber,
     pub memory_selection: u8,
@@ -188,28 +188,28 @@ pub struct ReportUserDefMemoryDTCExtDataRecordByDTCNumberRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportSupportedDTCExtDataRecordRequest {
+pub struct ReportSupportedDtcExtDataRecordRequest {
     pub dtc_ext_data_record_number: DtcExtendedDataRecordNumber,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportWWHOBDDTCByMaskRecordRequest {
+pub struct ReportWwhObdDtcByMaskRecordRequest {
     pub functional_group_identifier: FunctionalGroup,
-    pub dtc_severity_mask_record: [u8; 2],
+    pub dtc_severity_mask_record: DtcSeverityMaskRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportWWHOBDDTCWithPermanentStatusRequest {
+pub struct ReportWwhObdDtcWithPermanentStatusRequest {
     pub functional_group_identifier: FunctionalGroup,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCInformationByDTCReadinessGroupIdentifierRequest {
+pub struct ReportDtcInformationByDtcReadinessGroupIdentifierRequest {
     pub functional_group_identifier: FunctionalGroup,
-    pub dtc_readiness_group_identifier: u8, //TODO: Check if parameterised into enum
+    pub dtc_readiness_group_identifier: u8,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
@@ -218,280 +218,288 @@ pub enum ReportType {
     #[frame(id_pat = "0x00 | 0x1B..=0x41 | 0x43..=0x54 | 0x57..=0x7F")]
     IsoSaeReserved(u8),
     #[frame(id = 0x01)]
-    ReportNumberOfDTCByStatusMask,
+    ReportNumberOfDtcByStatusMask,
     #[frame(id = 0x02)]
-    ReportDTCByStatusMask,
+    ReportDtcByStatusMask,
     #[frame(id = 0x03)]
-    ReportDTCSnapshotIdentification,
+    ReportDtcSnapshotIdentification,
     #[frame(id = 0x04)]
-    ReportDTCSnapshotRecordByDTCNumber,
+    ReportDtcSnapshotRecordByDtcNumber,
     #[frame(id = 0x05)]
-    ReportDTCStoredDataByRecordNumber,
+    ReportDtcStoredDataByRecordNumber,
     #[frame(id = 0x06)]
-    ReportDTCExtDataRecordByDTCNumber,
+    ReportDtcExtDataRecordByDtcNumber,
     #[frame(id = 0x07)]
-    ReportNumberOfDTCBySeverityMaskRecord,
+    ReportNumberOfDtcBySeverityMaskRecord,
     #[frame(id = 0x08)]
-    ReportDTCBySeverityMaskRecord,
+    ReportDtcBySeverityMaskRecord,
     #[frame(id = 0x09)]
-    ReportSeverityInformationOfDTC,
+    ReportSeverityInformationOfDtc,
     #[frame(id = 0x0A)]
-    ReportSupportedDTC,
+    ReportSupportedDtc,
     #[frame(id = 0x0B)]
-    ReportFirstTestFailedDTC,
+    ReportFirstTestFailedDtc,
     #[frame(id = 0x0C)]
-    ReportFirstConfirmedDTC,
+    ReportFirstConfirmedDtc,
     #[frame(id = 0x0D)]
-    ReportMostRecentTestFailedDTC,
+    ReportMostRecentTestFailedDtc,
     #[frame(id = 0x0E)]
-    ReportMostRecentConfirmedDTC,
+    ReportMostRecentConfirmedDtc,
     #[frame(id = 0x14)]
-    ReportDTCFaultDetectionCounter,
+    ReportDtcFaultDetectionCounter,
     #[frame(id = 0x15)]
-    ReportDTCWithPermanentStatus,
+    ReportDtcWithPermanentStatus,
     #[frame(id = 0x16)]
-    ReportDTCExtDataRecordByRecordNumber,
+    ReportDtcExtDataRecordByRecordNumber,
     #[frame(id = 0x17)]
-    ReportUserDefMemoryDTCByStatusMask,
+    ReportUserDefMemoryDtcByStatusMask,
     #[frame(id = 0x18)]
-    ReportUserDefMemoryDTCSnapshotRecordByDTCNumber,
+    ReportUserDefMemoryDtcSnapshotRecordByDtcNumber,
     #[frame(id = 0x19)]
-    ReportUserDefMemoryDTCExtDataRecordByDTCNumber,
+    ReportUserDefMemoryDtcExtDataRecordByDtcNumber,
     #[frame(id = 0x1A)]
-    ReportSupportedDTCExtDataRecordRequest,
+    ReportSupportedDtcExtDataRecordRequest,
     #[frame(id = 0x42)]
-    ReportWWHOBDDTCByMaskRecord,
+    ReportWwhObdDtcByMaskRecord,
     #[frame(id = 0x55)]
-    ReportWWHOBDDTCWithPermanentStatus,
+    ReportWwhObdDtcWithPermanentStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub enum ReadDTCInformationResponse<'a> {
+pub enum ReadDtcInformationResponse<'a> {
     #[frame(id = 0x01)]
-    ReportNumberOfDTCByStatusMaskResponse(ReportNumberOfDTCByStatusMaskResponse),
+    ReportNumberOfDtcByStatusMaskResponse(ReportNumberOfDtcByStatusMaskResponse),
     #[frame(id = 0x02)]
-    ReportDTCByStatusMaskResponse(ReportDTCByStatusMaskResponse<'a>),
+    ReportDtcByStatusMaskResponse(ReportDtcByStatusMaskResponse<'a>),
     #[frame(id = 0x03)]
     ReportSnapshotIdentificationResponse(ReportSnapshotIdentificationResponse<'a>),
     #[frame(id = 0x04)]
-    ReportDTCSnapshotRecordByDTCNumberResponse(ReportDTCSnapshotRecordByDTCNumberResponse<'a>),
+    ReportDtcSnapshotRecordByDtcNumberResponse(ReportDtcSnapshotRecordByDtcNumberResponse<'a>),
     #[frame(id = 0x05)]
-    ReportDTCStoredDataByRecordNumberResponse(ReportDTCStoredDataByRecordNumberResponse<'a>),
+    ReportDtcStoredDataByRecordNumberResponse(ReportDtcStoredDataByRecordNumberResponse<'a>),
     #[frame(id = 0x06)]
-    ReportDTCExtDataRecordByDTCNumberResponse(ReportDTCExtDataRecordByDTCNumberResponse<'a>),
+    ReportDtcExtDataRecordByDtcNumberResponse(ReportDtcExtDataRecordByDtcNumberResponse<'a>),
     #[frame(id = 0x07)]
-    ReportNumberOfDTCBySeverityMaskRecordResponse(ReportNumberOfDTCBySeverityMaskRecordResponse),
+    ReportNumberOfDtcBySeverityMaskRecordResponse(ReportNumberOfDtcBySeverityMaskRecordResponse),
     #[frame(id = 0x08)]
-    ReportDTCBySeverityMaskRecordResponse(ReportDTCBySeverityMaskRecordResponse<'a>),
+    ReportDtcBySeverityMaskRecordResponse(ReportDtcBySeverityMaskRecordResponse<'a>),
     #[frame(id = 0x09)]
-    ReportSeverityInformationOfDTCResponse(ReportSeverityInformationOfDTCResponse<'a>),
+    ReportSeverityInformationOfDtcResponse(ReportSeverityInformationOfDtcResponse<'a>),
     #[frame(id = 0x0A)]
-    ReportSupportedDTCsResponse(ReportSupportedDTCsResponse<'a>),
+    ReportSupportedDtcsResponse(ReportSupportedDtcsResponse<'a>),
     #[frame(id = 0x0B)]
-    ReportFirstTestFailedDTCResponse(ReportFirstTestFailedDTCResponse<'a>),
+    ReportFirstTestFailedDtcResponse(ReportFirstTestFailedDtcResponse<'a>),
     #[frame(id = 0x0C)]
-    ReportFirstConfirmedDTCResponse(ReportFirstConfirmedDTCResponse<'a>),
+    ReportFirstConfirmedDtcResponse(ReportFirstConfirmedDtcResponse<'a>),
     #[frame(id = 0x0D)]
-    ReportMostRecentTestFailedDTCResponse(ReportMostRecentTestFailedDTCResponse<'a>),
+    ReportMostRecentTestFailedDtcResponse(ReportMostRecentTestFailedDtcResponse<'a>),
     #[frame(id = 0x0E)]
-    ReportMostRecentConfirmedDTCResponse(ReportMostRecentConfirmedDTCResponse<'a>),
+    ReportMostRecentConfirmedDtcResponse(ReportMostRecentConfirmedDtcResponse<'a>),
     #[frame(id = 0x14)]
-    ReportDTCFaultDetectionCounterResponse(ReportDTCFaultDetectionCounterResponse<'a>),
+    ReportDtcFaultDetectionCounterResponse(ReportDtcFaultDetectionCounterResponse<'a>),
     #[frame(id = 0x15)]
-    ReportDTCWithPermanentStatusResponse(ReportDTCWithPermanentStatusResponse<'a>),
+    ReportDtcWithPermanentStatusResponse(ReportDtcWithPermanentStatusResponse<'a>),
     #[frame(id = 0x16)]
-    ReportDTCExtDataRecordByRecordNumberResponse(ReportDTCExtDataRecordByRecordNumberResponse<'a>),
+    ReportDtcExtDataRecordByRecordNumberResponse(ReportDtcExtDataRecordByRecordNumberResponse<'a>),
     #[frame(id = 0x17)]
-    ReportUserDefMemoryDTCByStatusMaskResponse(ReportUserDefMemoryDTCByStatusMaskResponse<'a>),
+    ReportUserDefMemoryDtcByStatusMaskResponse(ReportUserDefMemoryDtcByStatusMaskResponse<'a>),
     #[frame(id = 0x18)]
-    ReportUserDefMemoryDTCSnapshotRecordByDTCNumberResponse(
-        ReportUserDefMemoryDTCSnapshotRecordByDTCNumberResponse<'a>,
+    ReportUserDefMemoryDtcSnapshotRecordByDtcNumberResponse(
+        ReportUserDefMemoryDtcSnapshotRecordByDtcNumberResponse<'a>,
     ),
     #[frame(id = 0x19)]
-    ReportUserDefMemoryDTCExtDataRecordByDTCNumberResponse(
-        ReportUserDefMemoryDTCExtDataRecordByDTCNumberResponse<'a>,
+    ReportUserDefMemoryDtcExtDataRecordByDtcNumberResponse(
+        ReportUserDefMemoryDtcExtDataRecordByDtcNumberResponse<'a>,
     ),
     #[frame(id = 0x1A)]
-    ReportSupportedDTCExtDataRecordResponse(ReportSupportedDTCExtDataRecordResponse<'a>),
+    ReportSupportedDtcExtDataRecordResponse(ReportSupportedDtcExtDataRecordResponse<'a>),
     #[frame(id = 0x42)]
-    ReportWWHOBDDTCByMaskRecordResponse(ReportWWHOBDDTCByMaskRecordResponse<'a>),
+    ReportWwhObdDtcByMaskRecordResponse(ReportWwhObdDtcByMaskRecordResponse<'a>),
     #[frame(id = 0x55)]
-    ReportWWHOBDDTCWithPermanentStatusResponse(ReportWWHOBDDTCWithPermanentStatusResponse<'a>),
+    ReportWwhObdDtcWithPermanentStatusResponse(ReportWwhObdDtcWithPermanentStatusResponse<'a>),
     #[frame(id = 0x56)]
-    ReportDTCInformationByReadinessGroupIdentifierResponse(
-        ReportDTCInformationByReadinessGroupIdentifierResponse<'a>,
+    ReportDtcInformationByReadinessGroupIdentifierResponse(
+        ReportDtcInformationByReadinessGroupIdentifierResponse<'a>,
     ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportNumberOfDTCByStatusMaskResponse {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_format_identifier: u8,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
-#[frame(error = UdsError)]
-pub struct ReportNumberOfDTCBySeverityMaskRecordResponse {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_format_identifier: u8,
+pub struct ReportNumberOfDtcByStatusMaskResponse {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_format_identifier: DtcFormatIdentifier,
     pub dtc_count: [u8; 2],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCByStatusMaskResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct ReportNumberOfDtcBySeverityMaskRecordResponse {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_format_identifier: DtcFormatIdentifier,
+    pub dtc_count: [u8; 2],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportSupportedDTCsResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct ReportDtcByStatusMaskResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_record: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportFirstTestFailedDTCResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct DtcAndStatusRecord {
+    pub dtc_record: [u8; 3],
+    pub status_of_dtc: DtcStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportFirstConfirmedDTCResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct ReportSupportedDtcsResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportMostRecentTestFailedDTCResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct ReportFirstTestFailedDtcResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportMostRecentConfirmedDTCResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct ReportFirstConfirmedDtcResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCWithPermanentStatusResponse<'a> {
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+pub struct ReportMostRecentTestFailedDtcResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub struct ReportMostRecentConfirmedDtcResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub struct ReportDtcWithPermanentStatusResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
 pub struct ReportSnapshotIdentificationResponse<'a> {
-    pub dtc_records: FrameIter<'a, DTCRecord>,
+    pub dtc_records: FrameIter<'a, DtcRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct DTCRecord {
+pub struct DtcRecord {
     pub dtc_record: [u8; 3],
     pub dtc_snapshot_record_number: DtcSnapshotRecordNumber,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCSnapshotRecordByDTCNumberResponse<'a> {
-    pub dtc_and_status_record: [u8; 4],
-    pub dtc_snapshot_records: FrameIter<'a, DTCSnapshotRecord<'a>>,
+pub struct ReportDtcSnapshotRecordByDtcNumberResponse<'a> {
+    pub dtc_and_status_record: DtcAndStatusRecord,
+    pub dtc_snapshot_records: FrameIter<'a, DtcSnapshotRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct DTCSnapshotRecord<'a> {
+pub struct DtcSnapshotRecord<'a> {
     pub dtc_snapshot_record_number: DtcSnapshotRecordNumber,
     pub dtc_snapshot_record_number_of_identifiers: u8,
-    pub dtc_snapshot_record: &'a [u8],
+    pub dtc_snapshot_record: FrameIter<'a, DataRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCStoredDataByRecordNumberResponse<'a> {
-    pub dtc_stored_data_records: FrameIter<'a, DTCStoredDataRecord<'a>>,
+pub struct ReportDtcStoredDataByRecordNumberResponse<'a> {
+    pub dtc_stored_data_records: FrameIter<'a, DtcStoredDataRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct DTCStoredDataRecord<'a> {
+pub struct DtcStoredDataRecord<'a> {
     pub dtc_stored_data_record_number: DtcStoredDataRecordNumber,
-    pub dtc_and_status_record: [u8; 4],
+    pub dtc_and_status_record: DtcAndStatusRecord,
     pub dtc_stored_data_record_number_of_identifiers: u8,
-    pub dtc_stored_data_record: &'a [u8],
+    pub dtc_stored_data_record: FrameIter<'a, DataRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCExtDataRecordByDTCNumberResponse<'a> {
-    pub dtc_and_status_record: [u8; 4],
-    pub dtc_ext_data_records: FrameIter<'a, DTCExtDataRecord<'a>>,
+pub struct ReportDtcExtDataRecordByDtcNumberResponse<'a> {
+    pub dtc_and_status_record: DtcAndStatusRecord,
+    pub dtc_ext_data_records: FrameIter<'a, DtcExtDataRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct DTCExtDataRecord<'a> {
+pub struct DtcExtDataRecord<'a> {
     pub dtc_ext_data_record_number: DtcExtendedDataRecordNumber,
     pub dtc_ext_data_record: &'a [u8],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCBySeverityMaskRecordResponse<'a> {
-    pub dtc_status_availability_mask: u8,
+pub struct ReportDtcBySeverityMaskRecordResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
     pub dtc_and_severity_record: &'a [u8],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportSeverityInformationOfDTCResponse<'a> {
-    pub dtc_status_availability_mask: u8,
+pub struct ReportSeverityInformationOfDtcResponse<'a> {
+    pub dtc_status_availability_mask: DtcStatus,
     pub dtc_and_severity_record: &'a [u8],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCFaultDetectionCounterResponse<'a> {
-    pub dtc_fault_detection_counter_record: &'a [u8],
+pub struct ReportDtcFaultDetectionCounterResponse<'a> {
+    pub dtc_fault_detection_counter_record: FrameIter<'a, DtcFaultDetectionRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCExtDataRecordByRecordNumberResponse<'a> {
+pub struct ReportDtcExtDataRecordByRecordNumberResponse<'a> {
     pub dtc_ext_data_record_number: DtcExtendedDataRecordNumber,
-    pub dtc_and_status_records: FrameIter<'a, ExtDTCAndStatusRecord<'a>>,
+    pub dtc_and_status_records: FrameIter<'a, ExtDtcAndStatusRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ExtDTCAndStatusRecord<'a> {
-    pub dtc_and_status_record: [u8; 4],
+pub struct ExtDtcAndStatusRecord<'a> {
+    pub dtc_and_status_record: DtcAndStatusRecord,
     pub dtc_ext_data_record: &'a [u8],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportUserDefMemoryDTCByStatusMaskResponse<'a> {
+pub struct ReportUserDefMemoryDtcByStatusMaskResponse<'a> {
     pub memory_selection: u8,
-    pub dtc_status_availability_mask: u8,
-    pub dtc_and_status_record: &'a [u8],
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_and_status_record: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportUserDefMemoryDTCSnapshotRecordByDTCNumberResponse<'a> {
+pub struct ReportUserDefMemoryDtcSnapshotRecordByDtcNumberResponse<'a> {
     pub memory_selection: u8,
-    pub dtc_and_status_record: [u8; 4],
+    pub dtc_and_status_record: DtcAndStatusRecord,
     pub user_def_dtc_snapshot_records: FrameIter<'a, UserDefDTCSnapshotRecord<'a>>,
 }
 
@@ -500,58 +508,52 @@ pub struct ReportUserDefMemoryDTCSnapshotRecordByDTCNumberResponse<'a> {
 pub struct UserDefDTCSnapshotRecord<'a> {
     pub user_def_dtc_snapshot_record_number: DtcSnapshotRecordNumber,
     pub dtc_snapshot_record_number_of_identifiers: u8,
-    pub user_def_dtc_snapshot_record: &'a [u8],
+    pub user_def_dtc_snapshot_record: FrameIter<'a, DataRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportUserDefMemoryDTCExtDataRecordByDTCNumberResponse<'a> {
+pub struct ReportUserDefMemoryDtcExtDataRecordByDtcNumberResponse<'a> {
     pub memory_selection: u8,
-    pub dtc_and_status_record: [u8; 4],
-    pub dtc_ext_data_record: FrameIter<'a, DTCExtDataRecord<'a>>,
+    pub dtc_and_status_record: DtcAndStatusRecord,
+    pub dtc_ext_data_record: FrameIter<'a, DtcExtDataRecord<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportSupportedDTCExtDataRecordResponse<'a> {
+pub struct ReportSupportedDtcExtDataRecordResponse<'a> {
     pub memory_selection: u8,
     pub dtc_ext_data_record_number: Option<u8>,
-    pub dtc_ext_data_records: FrameIter<'a, DTCAndStatusRecord>,
+    pub dtc_ext_data_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct DTCAndStatusRecord {
-    pub dtc_and_status_record: [u8; 4],
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
-#[frame(error = UdsError)]
-pub struct ReportWWHOBDDTCByMaskRecordResponse<'a> {
+pub struct ReportWwhObdDtcByMaskRecordResponse<'a> {
     pub functional_group_identifier: FunctionalGroup,
-    pub dtc_status_availability_mask: u8,
+    pub dtc_status_availability_mask: DtcStatus,
     pub dtc_severity_availability_mask: u8,
-    pub dtc_format_identifier: u8,
-    pub dtc_and_severity_record: &'a [u8],
+    pub dtc_format_identifier: WwhObdFormatIdentifier,
+    pub dtc_and_severity_records: FrameIter<'a, DtcAndSeverityRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportWWHOBDDTCWithPermanentStatusResponse<'a> {
+pub struct ReportWwhObdDtcWithPermanentStatusResponse<'a> {
     pub functional_group_identifier: FunctionalGroup,
-    pub dtc_status_availability_mask: u8,
-    pub dtc_format_identifier: u8,
-    pub dtc_record: &'a [u8],
+    pub dtc_status_availability_mask: DtcStatus,
+    pub dtc_format_identifier: WwhObdFormatIdentifier,
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
 #[frame(error = UdsError)]
-pub struct ReportDTCInformationByReadinessGroupIdentifierResponse<'a> {
+pub struct ReportDtcInformationByReadinessGroupIdentifierResponse<'a> {
     pub functional_group_identifier: FunctionalGroup,
-    pub dtc_status_availability_mask: u8,
+    pub dtc_status_availability_mask: DtcStatus,
     pub dtc_format_identifier: u8,
     pub dtc_readiness_group_identifier: u8,
-    pub dtc_and_status_record: &'a [u8],
+    pub dtc_and_status_records: FrameIter<'a, DtcAndStatusRecord>,
 }
 
 impl<'a> ace_core::codec::FrameRead<'a> for DtcStatusMask {
@@ -651,4 +653,181 @@ pub enum UserDefDtcExtendedDataRecordNumber {
     VehicleManufacturerSpecific(u8),
     #[frame(id = 0xFF)]
     AllUserDefDtcExtDataRecords,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub struct DtcSeverityMaskRecord {
+    pub dtc_severity_mask: DtcSeverity,
+    pub dtc_status_mask: DtcStatusMask,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DtcSeverity {
+    pub dtc_serverity_information: DtcSeverityInformation,
+    pub dtc_class_information: DtcClassInformation,
+}
+
+impl<'a> ace_core::codec::FrameRead<'a> for DtcSeverity {
+    type Error = UdsError;
+    fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
+        let byte = *buf
+            .first()
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
+                expected: 1,
+                actual: 0,
+            }))?;
+        *buf = &buf[1..];
+
+        Ok(Self {
+            dtc_serverity_information: DtcSeverityInformation {
+                maintenance_only: byte & 0x20 != 0,
+                check_at_next_halt: byte & 0x40 != 0,
+                check_immediately: byte & 0x80 != 0,
+            },
+            dtc_class_information: DtcClassInformation {
+                dtc_class_0: byte & 0x01 != 0,
+                dtc_class_1: byte & 0x02 != 0,
+                dtc_class_2: byte & 0x04 != 0,
+                dtc_class_3: byte & 0x08 != 0,
+                dtc_class_4: byte & 0x10 != 0,
+            },
+        })
+    }
+}
+
+impl ace_core::codec::FrameWrite for DtcSeverity {
+    type Error = UdsError;
+    fn encode<W: ace_core::codec::Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
+        let sev = &self.dtc_serverity_information;
+        let cls = &self.dtc_class_information;
+
+        let byte = (cls.dtc_class_0 as u8)
+            | ((cls.dtc_class_1 as u8) << 1)
+            | ((cls.dtc_class_2 as u8) << 2)
+            | ((cls.dtc_class_3 as u8) << 3)
+            | ((cls.dtc_class_4 as u8) << 4)
+            | ((sev.maintenance_only as u8) << 5)
+            | ((sev.check_at_next_halt as u8) << 6)
+            | ((sev.check_immediately as u8) << 7);
+
+        buf.write_bytes(&[byte]).map_err(UdsError::from)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DtcSeverityInformation {
+    pub maintenance_only: bool,
+    pub check_at_next_halt: bool,
+    pub check_immediately: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DtcClassInformation {
+    pub dtc_class_0: bool,
+    pub dtc_class_1: bool,
+    pub dtc_class_2: bool,
+    pub dtc_class_3: bool,
+    pub dtc_class_4: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DtcStatus {
+    pub test_failed: bool,
+    pub test_failed_this_operation_cycle: bool,
+    pub pending_dtc: bool,
+    pub confirmed_dtc: bool,
+    pub test_not_completed_since_last_clear: bool,
+    pub test_failed_since_last_clear: bool,
+    pub test_not_completed_this_operation_cycle: bool,
+    pub warning_indicator_requested: bool,
+}
+
+impl<'a> ace_core::codec::FrameRead<'a> for DtcStatus {
+    type Error = UdsError;
+    fn decode(buf: &mut &'a [u8]) -> Result<Self, Self::Error> {
+        let byte = *buf
+            .first()
+            .ok_or(UdsError::from(CodecError::LengthMismatch {
+                expected: 1,
+                actual: 0,
+            }))?;
+        *buf = &buf[1..];
+
+        Ok(Self {
+            test_failed: byte & 0x01 != 0,
+            test_failed_this_operation_cycle: byte & 0x02 != 0,
+            pending_dtc: byte & 0x04 != 0,
+            confirmed_dtc: byte & 0x08 != 0,
+            test_not_completed_since_last_clear: byte & 0x10 != 0,
+            test_failed_since_last_clear: byte & 0x20 != 0,
+            test_not_completed_this_operation_cycle: byte & 0x40 != 0,
+            warning_indicator_requested: byte & 0x80 != 0,
+        })
+    }
+}
+
+impl ace_core::codec::FrameWrite for DtcStatus {
+    type Error = UdsError;
+    fn encode<W: ace_core::codec::Writer>(&self, buf: &mut W) -> Result<(), Self::Error> {
+        let byte = (self.test_failed as u8)
+            | ((self.test_failed_this_operation_cycle as u8) << 1)
+            | ((self.pending_dtc as u8) << 2)
+            | ((self.confirmed_dtc as u8) << 3)
+            | ((self.test_not_completed_since_last_clear as u8) << 4)
+            | ((self.test_failed_since_last_clear as u8) << 5)
+            | ((self.test_not_completed_this_operation_cycle as u8) << 6)
+            | ((self.warning_indicator_requested as u8) << 7);
+
+        buf.write_bytes(&[byte]).map_err(UdsError::from)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub enum DtcFormatIdentifier {
+    #[frame(id = 0x00)]
+    SaeJ2012DaDtcFormat00,
+    #[frame(id = 0x01)]
+    Iso142291DtcFormat,
+    #[frame(id = 0x02)]
+    SaeJ193973DtcFormat,
+    #[frame(id = 0x03)]
+    Iso119924DtcFormat,
+    #[frame(id = 0x04)]
+    SaeJ2012DaDtcFormat04,
+    #[frame(id_pat = "0x05..=0xFF")]
+    IsoSaeReserved(u8),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub struct DtcAndSeverityRecord {
+    pub dtc_severity: DtcSeverity,
+    pub dtc_functional_unit: u8,
+    pub dtc_record: [u8; 3],
+    pub status_of_dtc: DtcStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub struct DtcFaultDetectionRecord {
+    pub dtc_record: [u8; 3],
+    pub counter: u8,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub struct DataRecord<'a> {
+    pub data_identifier: [u8; 2],
+    pub data: &'a [u8],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, FrameCodec)]
+#[frame(error = UdsError)]
+pub enum WwhObdFormatIdentifier {
+    #[frame(id = 0x02)]
+    SaeJ2012DaDtcFormat04,
+    #[frame(id = 0x04)]
+    SaeJ193973DtcFormat,
 }

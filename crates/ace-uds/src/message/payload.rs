@@ -51,7 +51,7 @@ pub enum UdsPayload<'a> {
     WriteMemoryByAddressRequest(WriteMemoryByAddressRequest<'a>),
     WriteMemoryByAddressResponse(WriteMemoryByAddressResponse<'a>),
     ReadDTCInformationRequest(ReadDtcInformationRequest),
-    ReadDTCInformationResponse(ReadDTCInformationResponse<'a>),
+    ReadDTCInformationResponse(ReadDtcInformationResponse<'a>),
     RequestDownloadRequest(RequestDownloadRequest<'a>),
     RequestDownloadResponse(RequestDownloadResponse<'a>),
     RequestUploadRequest(RequestUploadRequest<'a>),
@@ -244,7 +244,7 @@ impl<'a> UdsPayload<'a> {
                 ),
                 ServiceIdentifier::UdsServiceResponse(UdsServiceResponse::ReadDtcInformation) => {
                     Ok(UdsPayload::ReadDTCInformationResponse(
-                        ReadDTCInformationResponse::decode(buf)?,
+                        ReadDtcInformationResponse::decode(buf)?,
                     ))
                 }
                 ServiceIdentifier::UdsServiceRequest(UdsServiceRequest::RequestDownload) => Ok(
