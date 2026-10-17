@@ -240,7 +240,7 @@ roundtrip!(
 // region: ReadDTCInformation
 
 roundtrip!(rt_read_dtc_information_request, ReadDtcInformationRequest);
-roundtrip!(rt_read_dtc_information_response, ReadDTCInformationResponse);
+roundtrip!(rt_read_dtc_information_response, ReadDtcInformationResponse);
 
 // endregion: ReadDTCInformation
 
