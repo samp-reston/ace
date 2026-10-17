@@ -5,12 +5,15 @@ on:
     branches:
       - main
     tags:
-      - "v*"
+      # Matches GitLab's /^v[0-9]/ - a digit must follow the "v".
+      - "v[0-9]*"
   pull_request:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a tag run: cancelling mid-publish could leave a workspace
+  # only partially published to crates.io.
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -109,6 +112,10 @@ jobs:
   semver:
     name: Published API semver
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    # GitLab runs ace:semver in ace-release, i.e. only after ace-verify passes.
+    needs:
+      - matrix
+      - msrv
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -169,8 +176,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Manual approval gate: add required reviewers to the `crates-io` environment
-    # in repository settings. Publishing is a one-way door - a crates.io version
-    # is immutable once released (yank-only), so a human approves each release.
+    # in repository settings, and restrict it to v* tags. Publishing is a
+    # one-way door - a crates.io version is immutable once released (yank-only),
+    # so a human approves each release.
     environment: crates-io
     permissions:
       contents: read
@@ -194,7 +202,10 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
+      # --allow-branch '*': a tag run checks out a detached HEAD, which the
+      # release.toml allow-branch=["main"] guard would otherwise reject. The
+      # v* tag + environment approval are the real controls here.
       - name: Publish workspace crates in dependency order
-        run: cargo release publish --workspace --execute --no-confirm
+        run: cargo release publish --workspace --execute --no-confirm --allow-branch '*'
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
